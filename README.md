@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Apron
 
-## Getting Started
+**Scarce per-epoch execution capacity, sold as ERC-1155 apron slots.**
 
-First, run the development server:
+Buy an apron slot for this epoch → swap against **active** reserves only → without a slot (or oversize / same-block passive unlock) the trade **reverts** at `beforeSwap`. The Graph indexes mint/burn/consume; Hedera x402 paid intel writes the apron-slot ask.
+
+Explicitly **not** TAP (no Aqua take-permit) · not Dockyard (no fee desk) · not Parity (no peg desk). No fake APY. No finalist guarantee.
+
+## Console
+
+| Panel | What it proves |
+|---|---|
+| Buy an apron slot | Fixed-price ERC-1155 mint, current epoch only, expiry named |
+| Swap | `beforeSwap` gate: slot ≥ size, notional burned, active-only quote |
+| Reject log | No-slot / oversize / same-block passive-unlock reverts, live |
+| Graph panel | Mint/burn/consume index feed with per-epoch notionals |
+| Pay for the ask | One paid x402 call on Hedera writes the slot ask |
+
+**Judge demo:** press **Run demo** — it plays buy → fill → reject-without → reject-oversize → paid intel in one run.
+
+## Demo script (≤ 4 min)
+
+1. Swap without a slot — reverts on camera.
+2. Apron = scarce epoch execution capacity (gate slots).
+3. Mint an ERC-1155 apron slot.
+4. Same-size swap now fills against active depth.
+5. Same-block split cannot unlock passive — revert.
+6. Graph panel updates mint/consume.
+7. Paid x402 intel updates the ask.
+8. Close: ≠ TAP; named risks (slots expire worthless, seat ≠ equity).
+
+## Stack
+
+- Next.js 16 (App Router) + TypeScript + Tailwind v4
+- Brand: warm near-black + one amber accent, serif display + mono numerics (`brand.md`)
+- `lib/apron/` — typed protocol state machine (epoch refresh, slot mint, `beforeSwap` gate, rejects, intel). Simulated fork semantics; contract calls wire in at the same seams.
+- Planned: Uniswap v4 hook (Foundry) · The Graph Studio subgraph · Hedera x402 intel node
+
+## Develop
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev   # http://localhost:3000
+npm run build
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Named risks
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Unused apron slots expire worthless at epoch refresh. A slot is capacity, not LP equity. Active depth is capped at λ × total reserves.
