@@ -84,7 +84,10 @@ export function IntelView() {
             <p className="mt-5 border-t border-border pt-4 text-xs leading-5 text-muted">
               Current ask on this session:{" "}
               <span className="font-mono tabular-nums text-accent-strong">
-                {fmtPricePerEth(s.slotPricePerEth)} <EthIcon />
+                {s.slotPricePerEth !== null
+                  ? `${fmtPricePerEth(s.slotPricePerEth)}`
+                  : "— not written"}{" "}
+                {s.slotPricePerEth !== null ? <EthIcon /> : null}
               </span>{" "}
               ·{" "}
               <Link

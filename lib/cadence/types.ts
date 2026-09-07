@@ -95,11 +95,23 @@ export interface IntelQuote {
 }
 
 export interface Wallet {
-  address: string;
-  eth: number;
-  usdc: number;
-  /** ERC-1155 balance: capacity notional held for the CURRENT epoch only */
+  /** connected EIP-1193 account — null when no wallet is connected */
+  address: string | null;
+  /** live ETH balance of the connected account, from the chain */
+  eth: number | null;
+  /** ERC-1155 balance: capacity notional held for the CURRENT epoch only —
+   *  real once the cadence hook contract is connected */
   slot: { epochId: number; capacity: number; commitmentId?: number } | null;
+}
+
+/** Live chain state — read from a real RPC, never simulated. */
+export interface ChainState {
+  chainId: number | null;
+  blockNumber: number | null;
+  /** cadence epoch = floor(block / epochLengthBlocks), derived from the real chain */
+  epochId: number | null;
+  /** blocks remaining in the current cadence epoch */
+  blocksUntilEpochEnd: number | null;
 }
 
 export interface PoolState {
@@ -127,14 +139,13 @@ export interface PricePoint {
 }
 
 export interface WorldState {
-  blockNumber: number;
-  epochId: number;
-  blocksUntilEpochEnd: number;
-  pool: PoolState;
+  chain: ChainState;
+  /** live pool state from the cadence hook — null until contracts are connected */
+  pool: PoolState | null;
   wallet: Wallet;
-  /** fixed primary price, ETH per 1 ETH of slot capacity */
-  slotPricePerEth: number;
-  askPerEth: number;
+  /** slot ask written by paid intel — null until a real intel call lands */
+  slotPricePerEth: number | null;
+  askPerEth: number | null;
   intel: IntelQuote | null;
   intelCalls: number;
   graph: GraphEvent[];
@@ -145,10 +156,14 @@ export interface WorldState {
   lastIntelError: string | null;
 }
 
-export const DEFAULT_ASK_PER_ETH = 0.002;
+export const EPOCH_LENGTH_BLOCKS = 12;
 
-export function slotPrice(state: WorldState): number {
-  return state.intel?.suggestedAskPerEth ?? DEFAULT_ASK_PER_ETH;
+export function epochFromBlock(block: number): number {
+  return Math.floor(block / EPOCH_LENGTH_BLOCKS);
+}
+
+export function blocksUntilEpochEnd(block: number): number {
+  return EPOCH_LENGTH_BLOCKS - (block % EPOCH_LENGTH_BLOCKS);
 }
 
 export function activePriceUsd(pool: PoolState): number {

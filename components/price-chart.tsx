@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useCadence } from "@/lib/cadence/provider";
-import { BLOCK_INTERVAL_MS } from "@/lib/cadence/machine";
 import { fmtUsdc } from "@/lib/cadence/format";
 import { EthIcon } from "./eth-icon";
 import { Panel } from "./panel";
@@ -38,10 +37,16 @@ export function PriceChart({ className = "" }: { className?: string }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  // block pacing comes from the real gap between the last two blocks
+  const interval =
+    points.length >= 2
+      ? Math.max(250, points[points.length - 1].ts - points[points.length - 2].ts)
+      : 2000;
+
   // time since the newest block landed, 0..1 across the block interval
   const frac =
     now !== null && newest
-      ? Math.min(1, Math.max(0, (now - newest.ts) / BLOCK_INTERVAL_MS))
+      ? Math.min(1, Math.max(0, (now - newest.ts) / interval))
       : 0;
   const e = 1 - Math.pow(1 - frac, 3);
 

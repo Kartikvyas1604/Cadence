@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Ticket, TriangleAlert } from "lucide-react";
+import { Ticket, TriangleAlert, Unplug } from "lucide-react";
 import { EthIcon } from "./eth-icon";
 import { Panel } from "./panel";
 import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
@@ -16,13 +16,18 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
   const [pending, setPending] = useState(false);
 
   const ask = s.slotPricePerEth;
-  const cost = size * ask;
-  const insufficient = cost > s.wallet.eth;
+  const cost = ask !== null ? size * ask : null;
+  const insufficient =
+    cost !== null && s.wallet.eth !== null && cost > s.wallet.eth;
   const slot =
-    s.wallet.slot && s.wallet.slot.epochId === s.epochId ? s.wallet.slot : null;
+    s.wallet.slot && s.chain.epochId !== null && s.wallet.slot.epochId === s.chain.epochId
+      ? s.wallet.slot
+      : null;
+  const connected = s.wallet.address !== null;
+  const contractsReady = s.pool !== null;
 
   async function handleBuy() {
-    if (pending || insufficient) return;
+    if (pending || !connected || ask === null || !contractsReady || insufficient) return;
     setPending(true);
     try {
       await buySlot(size);
@@ -30,6 +35,15 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
       setPending(false);
     }
   }
+
+  const blocked =
+    !connected
+      ? "Connect your wallet to mint a cadence slot."
+      : !contractsReady
+        ? "Cadence slot contracts are not connected yet — minting activates once the hook is wired."
+        : ask === null
+          ? "No ask written yet — fetch paid intel to write the slot ask."
+          : null;
 
   return (
     <Panel
@@ -57,7 +71,8 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
               </dd>
               <dt className="text-muted">expires</dt>
               <dd className="tabular-nums text-foreground">
-                end of epoch #{s.epochId} ({s.blocksUntilEpochEnd} blocks)
+                end of epoch #{s.chain.epochId} ({s.chain.blocksUntilEpochEnd}{" "}
+                blocks)
               </dd>
             </dl>
             {slot.commitmentId != null ? (
@@ -79,7 +94,9 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
         <div className="flex flex-1 flex-col justify-center rounded-md border border-dashed border-border-strong p-4 text-center">
           <Ticket className="mx-auto size-6 text-muted" aria-hidden />
           <p className="mt-2 text-sm font-medium text-foreground">
-            No cadence slot for epoch #{s.epochId}
+            {s.chain.epochId !== null
+              ? `No cadence slot for epoch #${s.chain.epochId}`
+              : "No cadence slot"}
           </p>
           <p className="mt-1 text-xs text-muted">
             Swaps will revert at beforeSwap until you mint one.
@@ -126,13 +143,25 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
         <div className="flex items-baseline justify-between">
           <span className="text-muted">ask</span>
           <span className="tabular-nums text-foreground">
-            {fmtPricePerEth(ask)} <EthIcon /> / 1 <EthIcon /> cap
+            {ask !== null ? (
+              <>
+                {fmtPricePerEth(ask)} <EthIcon /> / 1 <EthIcon /> cap
+              </>
+            ) : (
+              "—"
+            )}
           </span>
         </div>
         <div className="flex items-baseline justify-between">
           <span className="text-muted">total</span>
           <span className="text-lg font-medium tabular-nums text-accent-strong">
-            {fmtEth(cost, 4)} <EthIcon />
+            {cost !== null ? (
+              <>
+                {fmtEth(cost, 4)} <EthIcon />
+              </>
+            ) : (
+              "—"
+            )}
           </span>
         </div>
       </div>
@@ -140,28 +169,43 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
       {insufficient ? (
         <p className="mt-4 flex items-start gap-1.5 text-xs leading-5 text-danger">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          Wallet holds {fmtEth(s.wallet.eth, 3)} <EthIcon /> — not enough for
-          this slot. Pick smaller capacity.
+          Wallet holds {s.wallet.eth !== null ? `${fmtEth(s.wallet.eth, 4)} ` : ""}
+          <EthIcon /> — not enough for this slot. Pick smaller capacity.
+        </p>
+      ) : null}
+
+      {blocked ? (
+        <p className="mt-4 flex items-start gap-1.5 text-xs leading-5 text-muted">
+          <Unplug className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          {blocked}
         </p>
       ) : null}
 
       <button
         type="button"
         onClick={handleBuy}
-        disabled={pending || insufficient}
+        disabled={pending || blocked !== null || insufficient}
         aria-busy={pending}
         className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-accent font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
       >
         {pending ? (
           "Minting…"
+        ) : cost !== null ? (
+          <>Mint cadence slot · {fmtEth(cost, 4)} <EthIcon /></>
         ) : (
-          <>
-            Mint cadence slot · {fmtEth(cost, 4)} <EthIcon />
-          </>
+          "Mint cadence slot"
         )}
       </button>
       <p className="mt-3 text-center font-mono text-[11px] text-muted">
-        balance {fmtEth(s.wallet.eth, 3)} <EthIcon /> · slot ≠ LP equity
+        balance{" "}
+        {s.wallet.eth !== null ? (
+          <>
+            {fmtEth(s.wallet.eth, 4)} <EthIcon />
+          </>
+        ) : (
+          "—"
+        )}{" "}
+        · slot ≠ LP equity
       </p>
     </Panel>
   );

@@ -1,12 +1,6 @@
-import type { GraphEvent, IntelQuote, PricePoint, RejectEvent, WorldState } from "./types";
-import { DEFAULT_ASK_PER_ETH, REJECT_REASONS } from "./types";
+import type { IntelQuote, PricePoint, RejectEvent, WorldState } from "./types";
+import { REJECT_REASONS } from "./types";
 import { commitHash } from "./hash";
-
-export const LAMBDA_BPS = 2500;
-export const EPOCH_LENGTH_BLOCKS = 12;
-export const BLOCK_INTERVAL_MS = 1800;
-export const ETH_START = 8;
-export const USDC_START = 25_000;
 
 const MAX_PRICE_POINTS = 180;
 
@@ -21,7 +15,7 @@ function takeCommitmentId(): number {
 }
 
 function appendPrice(
-  pool: WorldState["pool"],
+  pool: NonNullable<WorldState["pool"]>,
   priceHistory: PricePoint[],
   block: number,
   epochId: number,
@@ -42,30 +36,20 @@ function appendPrice(
   ].slice(-MAX_PRICE_POINTS);
 }
 
-export function createWorld(): WorldState {
-  const activeEth = 120;
-  const price = 2_500;
+/** Empty world — every value fills in from a real source (wallet, chain,
+ *  intel, contracts). Nothing here is fabricated. */
+export function initialWorld(): WorldState {
   return {
-    blockNumber: 41_200_100,
-    epochId: 3_204,
-    blocksUntilEpochEnd: EPOCH_LENGTH_BLOCKS,
-    pool: {
-      pair: "ETH / USDC",
-      lambdaBps: LAMBDA_BPS,
-      epochLengthBlocks: EPOCH_LENGTH_BLOCKS,
-      activeReserveEth: activeEth,
-      activeReserveUsdc: activeEth * price,
-      passiveReserveEth: activeEth * 3,
-      passiveReserveUsdc: activeEth * 3 * price,
+    chain: {
+      chainId: null,
+      blockNumber: null,
+      epochId: null,
+      blocksUntilEpochEnd: null,
     },
-    wallet: {
-      address: "0xApr0…0001",
-      eth: ETH_START,
-      usdc: USDC_START,
-      slot: null,
-    },
-    slotPricePerEth: DEFAULT_ASK_PER_ETH,
-    askPerEth: DEFAULT_ASK_PER_ETH,
+    pool: null,
+    wallet: { address: null, eth: null, slot: null },
+    slotPricePerEth: null,
+    askPerEth: null,
     intel: null,
     intelCalls: 0,
     graph: [],
@@ -78,7 +62,6 @@ export function createWorld(): WorldState {
 }
 
 export type Action =
-  | { type: "TICK" }
   | { type: "BUY_SLOT"; sizeEth: number; pricePerEth: number }
   | { type: "COMMIT_MINT"; sizeEth: number; pricePerEth: number; salt: string }
   | { type: "REVEAL_SWAP"; sizeEth: number; salt: string }
@@ -86,6 +69,17 @@ export type Action =
   | { type: "SWAP_REJECTED"; reason: RejectEvent["reason"]; tradeSize: number; detail: string }
   | { type: "INTEL_QUOTE"; quote: IntelQuote }
   | { type: "INTEL_ERROR"; message: string };
+
+/** Quote output of swapping sizeEth into the ACTIVE side only (constant product). */
+export function quoteSwapOutUsdc(
+  pool: NonNullable<WorldState["pool"]>,
+  sizeEth: number,
+): number {
+  const k = pool.activeReserveEth * pool.activeReserveUsdc;
+  const newEth = pool.activeReserveEth + sizeEth;
+  const newUsdc = k / newEth;
+  return pool.activeReserveUsdc - newUsdc;
+}
 
 function addReject(
   state: WorldState,
@@ -99,8 +93,8 @@ function addReject(
       {
         id: takeEventId(),
         reason,
-        epochId: state.epochId,
-        blockNumber: state.blockNumber,
+        epochId: state.chain.epochId ?? 0,
+        blockNumber: state.chain.blockNumber ?? 0,
         tradeSize,
         detail,
         ts: Date.now(),
@@ -110,7 +104,7 @@ function addReject(
   };
 }
 
-/** Shared fill path for the public swap and the reveal-on-consume path. */
+/** Shared fill path — executes against the live pool only. */
 function fillSwap(
   state: WorldState,
   sizeEth: number,
@@ -118,31 +112,33 @@ function fillSwap(
   capacityUsed: number,
   fromCommitment: boolean,
 ): WorldState {
-  const k = state.pool.activeReserveEth * state.pool.activeReserveUsdc;
-  const newEth = state.pool.activeReserveEth + sizeEth;
+  const pool = state.pool;
+  const slot = state.wallet.slot;
+  const epochId = state.chain.epochId;
+  const blockNumber = state.chain.blockNumber;
+  if (!pool || !slot || epochId === null || blockNumber === null) return state;
+  const k = pool.activeReserveEth * pool.activeReserveUsdc;
+  const newEth = pool.activeReserveEth + sizeEth;
   const newUsdc = k / newEth;
-  const pool = {
-    ...state.pool,
+  const nextPool = {
+    ...pool,
     activeReserveEth: newEth,
     activeReserveUsdc: newUsdc,
-    passiveReserveEth: state.pool.passiveReserveEth,
-    passiveReserveUsdc: state.pool.passiveReserveUsdc,
   };
   return {
     ...state,
     wallet: {
       ...state.wallet,
-      usdc: state.wallet.usdc + outUsdc,
       slot: {
-        epochId: state.epochId,
-        capacity: Math.max(0, state.wallet.slot!.capacity - capacityUsed),
+        ...slot,
+        capacity: Math.max(0, slot.capacity - capacityUsed),
       },
     },
-    pool,
+    pool: nextPool,
     swaps: [
       {
-        epochId: state.epochId,
-        blockNumber: state.blockNumber,
+        epochId,
+        blockNumber,
         sizeEth,
         outUsdc,
         ts: Date.now(),
@@ -150,21 +146,21 @@ function fillSwap(
       ...state.swaps,
     ],
     priceHistory: appendPrice(
-      pool,
+      nextPool,
       state.priceHistory,
-      state.blockNumber,
-      state.epochId,
+      blockNumber,
+      epochId,
       { sizeEth, outUsdc },
     ),
     graph: [
       {
         id: takeEventId(),
         kind: "consume",
-        epochId: state.epochId,
-        blockNumber: state.blockNumber,
+        epochId,
+        blockNumber,
         size: capacityUsed,
         fromCommitment,
-        trader: state.wallet.address,
+        trader: state.wallet.address ?? "unknown",
         ts: Date.now(),
       },
       ...state.graph,
@@ -172,91 +168,31 @@ function fillSwap(
   };
 }
 
-/** Quote output of swapping sizeEth into the ACTIVE side only (constant product). */
-export function quoteSwapOutUsdc(
-  pool: WorldState["pool"],
-  sizeEth: number,
-): number {
-  const k = pool.activeReserveEth * pool.activeReserveUsdc;
-  const newEth = pool.activeReserveEth + sizeEth;
-  const newUsdc = k / newEth;
-  return pool.activeReserveUsdc - newUsdc;
-}
-
 export function reducer(state: WorldState, action: Action): WorldState {
   switch (action.type) {
-    case "TICK": {
-      const block = state.blockNumber + 1;
-      const remaining = state.blocksUntilEpochEnd - 1;
-      if (remaining > 0) {
-        return {
-          ...state,
-          blockNumber: block,
-          blocksUntilEpochEnd: remaining,
-          priceHistory: appendPrice(state.pool, state.priceHistory, block, state.epochId),
-        };
-      }
-      // Epoch refresh: expire prior seats, refresh active = λ × total, new epochId
-      const totalEth = state.pool.activeReserveEth + state.pool.passiveReserveEth;
-      const totalUsdc = state.pool.activeReserveUsdc + state.pool.passiveReserveUsdc;
-      const activeShare = state.pool.lambdaBps / 10_000;
-      const graph: GraphEvent[] = state.wallet.slot
-        ? [
-            {
-              id: takeEventId(),
-              kind: "burn",
-              epochId: state.epochId,
-              blockNumber: block,
-              size: state.wallet.slot.capacity,
-              trader: state.wallet.address,
-              ts: Date.now(),
-            },
-            ...state.graph,
-          ]
-        : state.graph;
-      const pool = {
-        ...state.pool,
-        activeReserveEth: totalEth * activeShare,
-        activeReserveUsdc: totalUsdc * activeShare,
-        passiveReserveEth: totalEth * (1 - activeShare),
-        passiveReserveUsdc: totalUsdc * (1 - activeShare),
-      };
-      return {
-        ...state,
-        blockNumber: block,
-        epochId: state.epochId + 1,
-        blocksUntilEpochEnd: state.pool.epochLengthBlocks,
-        wallet: { ...state.wallet, slot: null },
-        graph,
-        pool,
-        // unrevealed Private Cadence Intents expire with the epoch
-        commitments: state.commitments.map((c) =>
-          c.status === "committed" && c.epochId === state.epochId
-            ? { ...c, status: "expired" as const }
-            : c,
-        ),
-        priceHistory: appendPrice(pool, state.priceHistory, block, state.epochId + 1),
-      };
-    }
-
     case "BUY_SLOT": {
+      // mints require the connected hook contract and a written ask
+      if (!state.pool || state.slotPricePerEth === null) return state;
       const cost = action.sizeEth * action.pricePerEth;
+      const epochId = state.chain.epochId;
+      const blockNumber = state.chain.blockNumber;
+      if (epochId === null || blockNumber === null) return state;
       return {
         ...state,
         wallet: {
           ...state.wallet,
-          eth: state.wallet.eth - cost,
-          slot: { epochId: state.epochId, capacity: action.sizeEth },
+          eth: state.wallet.eth === null ? null : state.wallet.eth - cost,
+          slot: { epochId, capacity: action.sizeEth },
         },
         graph: [
           {
             id: takeEventId(),
             kind: "mint",
-            epochId: state.epochId,
-            blockNumber: state.blockNumber,
+            epochId,
+            blockNumber,
             size: action.sizeEth,
             pricePaid: cost,
-            trader: state.wallet.address,
+            trader: state.wallet.address ?? "unknown",
             ts: Date.now(),
           },
           ...state.graph,
@@ -264,26 +200,26 @@ export function reducer(state: WorldState, action: Action): WorldState {
       };
     }
 
-    case "SWAP_SUCCEEDED": {
-      return fillSwap(state, action.sizeEth, action.outUsdc, action.capacityUsed, false);
-    }
-
     case "COMMIT_MINT": {
       // B2: pay fixed price, mint against H — size never enters the public payload
+      if (!state.pool || state.slotPricePerEth === null) return state;
       const cost = action.sizeEth * action.pricePerEth;
-      const H = commitHash(action.sizeEth, state.epochId, action.salt);
+      const epochId = state.chain.epochId;
+      const blockNumber = state.chain.blockNumber;
+      if (epochId === null || blockNumber === null) return state;
+      const H = commitHash(action.sizeEth, epochId, action.salt);
       const id = takeCommitmentId();
       return {
         ...state,
         wallet: {
           ...state.wallet,
-          eth: state.wallet.eth - cost,
-          slot: { epochId: state.epochId, capacity: action.sizeEth, commitmentId: id },
+          eth: state.wallet.eth === null ? null : state.wallet.eth - cost,
+          slot: { epochId, capacity: action.sizeEth, commitmentId: id },
         },
         commitments: [
           {
             id,
-            epochId: state.epochId,
+            epochId,
             H,
             size: action.sizeEth,
             salt: action.salt,
@@ -297,12 +233,12 @@ export function reducer(state: WorldState, action: Action): WorldState {
           {
             id: takeEventId(),
             kind: "commit",
-            epochId: state.epochId,
-            blockNumber: state.blockNumber,
+            epochId,
+            blockNumber,
             size: 0,
             pricePaid: cost,
             H,
-            trader: state.wallet.address,
+            trader: state.wallet.address ?? "unknown",
             ts: Date.now(),
           },
           ...state.graph,
@@ -311,16 +247,20 @@ export function reducer(state: WorldState, action: Action): WorldState {
     }
 
     case "REVEAL_SWAP": {
-      // C1: revealAndConsume(size, salt) — verify hash, emit SlotRevealed, then fill
+      // C1: revealAndConsume(size, salt) — verify hash, emit reveal, then fill
       const slot = state.wallet.slot;
+      const epochId = state.chain.epochId;
+      if (!slot || epochId === null || slot.epochId !== epochId) {
+        return addReject(state, "no-slot", action.sizeEth, REJECT_REASONS["no-slot"].detail);
+      }
       const c =
-        slot && slot.epochId === state.epochId && slot.commitmentId != null
+        slot.commitmentId != null
           ? state.commitments.find((x) => x.id === slot.commitmentId)
           : null;
       if (!c || c.status !== "committed") {
         return addReject(state, "no-slot", action.sizeEth, REJECT_REASONS["no-slot"].detail);
       }
-      if (commitHash(action.sizeEth, state.epochId, action.salt) !== c.H) {
+      if (commitHash(action.sizeEth, epochId, action.salt) !== c.H) {
         return addReject(state, "bad-reveal", action.sizeEth, REJECT_REASONS["bad-reveal"].detail);
       }
       const revealed = state.commitments.map((x) =>
@@ -333,18 +273,24 @@ export function reducer(state: WorldState, action: Action): WorldState {
           {
             id: takeEventId(),
             kind: "reveal",
-            epochId: state.epochId,
-            blockNumber: state.blockNumber,
+            epochId,
+            blockNumber: state.chain.blockNumber ?? 0,
             size: action.sizeEth,
             H: c.H,
-            trader: state.wallet.address,
+            trader: state.wallet.address ?? "unknown",
             ts: Date.now(),
           },
           ...state.graph,
         ],
       };
-      const outUsdc = quoteSwapOutUsdc(state.pool, action.sizeEth);
+      const outUsdc = state.pool
+        ? quoteSwapOutUsdc(state.pool, action.sizeEth)
+        : 0;
       return fillSwap(withReveal, action.sizeEth, outUsdc, action.sizeEth, true);
+    }
+
+    case "SWAP_SUCCEEDED": {
+      return fillSwap(state, action.sizeEth, action.outUsdc, action.capacityUsed, false);
     }
 
     case "SWAP_REJECTED": {

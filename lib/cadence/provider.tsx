@@ -9,14 +9,12 @@ import {
   useReducer,
   useRef,
 } from "react";
-import {
-  BLOCK_INTERVAL_MS,
-  createWorld,
-  quoteSwapOutUsdc,
-  reducer,
-} from "./machine";
+import { initialWorld, reducer } from "./machine";
 import type { IntelQuote, RejectReason, WorldState } from "./types";
 import { REJECT_REASONS } from "./types";
+import { epochFromBlock, blocksUntilEpochEnd } from "./types";
+import { useInjectedWallet } from "@/lib/wallet/use-injected-wallet";
+import { useChainState } from "./chain";
 import { randomSalt } from "./hash";
 
 const IntelContext = createContext<WorldState | null>(null);
@@ -32,39 +30,80 @@ const ActionsContext = createContext<{
 } | null>(null);
 
 export function CadenceProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, createWorld);
+  const [state, dispatch] = useReducer(reducer, undefined, initialWorld);
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  useEffect(() => {
-    const t = setInterval(() => dispatch({ type: "TICK" }), BLOCK_INTERVAL_MS);
-    return () => clearInterval(t);
+  // real sources: connected wallet, live chain, paid intel
+  const wallet = useInjectedWallet();
+  const chain = useChainState(wallet.chainId);
+
+  const world: WorldState = useMemo(
+    () => ({
+      chain: {
+        chainId: chain.chainId,
+        blockNumber: chain.blockNumber,
+        epochId:
+          chain.blockNumber != null ? epochFromBlock(chain.blockNumber) : null,
+        blocksUntilEpochEnd:
+          chain.blockNumber != null
+            ? blocksUntilEpochEnd(chain.blockNumber)
+            : null,
+      },
+      pool: null,
+      wallet: {
+        address: wallet.address,
+        eth: wallet.ethBalance,
+        slot: null,
+      },
+      slotPricePerEth: state.intel?.suggestedAskPerEth ?? null,
+      askPerEth: state.intel?.suggestedAskPerEth ?? null,
+      intel: state.intel,
+      intelCalls: state.intelCalls,
+      graph: state.graph,
+      rejects: state.rejects,
+      commitments: state.commitments,
+      swaps: state.swaps,
+      priceHistory: state.priceHistory,
+      lastIntelError: state.lastIntelError,
+    }),
+    [chain.chainId, chain.blockNumber, wallet.address, wallet.ethBalance, state],
+  );
+
+  const requireContracts = useCallback((): WorldState | null => {
+    const s = stateRef.current;
+    if (!s.pool || s.slotPricePerEth === null || !s.wallet.address) return null;
+    return s;
   }, []);
 
+  // Actions activate only when a real pool, a written ask, and a connected
+  // wallet all exist — until then the panels show their honest states.
   const buySlot = useCallback(async (sizeEth: number) => {
-    const s = stateRef.current;
-    dispatch({ type: "BUY_SLOT", sizeEth, pricePerEth: s.intel?.suggestedAskPerEth ?? s.slotPricePerEth });
-  }, []);
+    const s = requireContracts();
+    if (!s) return;
+    dispatch({ type: "BUY_SLOT", sizeEth, pricePerEth: s.slotPricePerEth! });
+  }, [requireContracts]);
 
-  // B2: commit-mint — H lands public, size stays client-side until reveal
   const commitMint = useCallback(async (sizeEth: number) => {
-    const s = stateRef.current;
+    const s = requireContracts();
+    if (!s) return;
     dispatch({
       type: "COMMIT_MINT",
       sizeEth,
-      pricePerEth: s.intel?.suggestedAskPerEth ?? s.slotPricePerEth,
+      pricePerEth: s.slotPricePerEth!,
       salt: randomSalt(),
     });
-  }, []);
+  }, [requireContracts]);
 
   const checkPreSwap = (
     s: WorldState,
     sizeEth: number,
     opts: { withoutSlot?: boolean; oversize?: boolean; reachPassive?: boolean },
   ): RejectReason | null => {
-    if (opts.withoutSlot || !s.wallet.slot || s.wallet.slot.epochId !== s.epochId) {
+    if (!s.pool) return "no-slot";
+    if (opts.withoutSlot || !s.wallet.slot || s.wallet.slot.epochId !== s.chain.epochId) {
       return "no-slot";
     }
     if (opts.oversize || sizeEth > s.wallet.slot.capacity) {
@@ -81,7 +120,8 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       sizeEth: number,
       opts: { withoutSlot?: boolean; oversize?: boolean; reachPassive?: boolean } = {},
     ): Promise<"filled" | RejectReason> => {
-      const s = stateRef.current;
+      const s = requireContracts();
+      if (!s) return "no-slot";
       const blocked = checkPreSwap(s, sizeEth, opts);
       if (blocked) {
         dispatch({
@@ -102,29 +142,34 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: "REVEAL_SWAP", sizeEth, salt: c.salt });
         return "filled";
       }
-      const outUsdc = quoteSwapOutUsdc(s.pool, sizeEth);
+      const outUsdc = requireContracts() && s.pool
+        ? (s.pool.activeReserveUsdc -
+            (s.pool.activeReserveEth * s.pool.activeReserveUsdc) /
+              (s.pool.activeReserveEth + sizeEth))
+        : 0;
       dispatch({ type: "SWAP_SUCCEEDED", sizeEth, outUsdc, capacityUsed: sizeEth });
       return "filled";
     },
-    [],
+    [requireContracts],
   );
 
-  // D4 demo: reveal with a wrong salt — hook must revert
+  // D4: reveal with a wrong salt — the hook must revert
   const attemptBadReveal = useCallback(
     async (sizeEth: number): Promise<"filled" | RejectReason> => {
-      const s = stateRef.current;
+      const s = requireContracts();
+      if (!s) return "no-slot";
       const slot = s.wallet.slot;
       const c =
         slot && slot.commitmentId != null
           ? s.commitments.find((x) => x.id === slot.commitmentId)
           : null;
-      if (!slot || !c || c.epochId !== s.epochId || c.status !== "committed") {
+      if (!slot || !c || c.epochId !== s.chain.epochId || c.status !== "committed") {
         return "no-slot";
       }
       dispatch({ type: "REVEAL_SWAP", sizeEth, salt: `${c.salt}ff` });
       return "filled";
     },
-    [],
+    [requireContracts],
   );
 
   const refreshIntel = useCallback(async (): Promise<boolean> => {
@@ -149,14 +194,13 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const value = state;
   const actions = useMemo(
     () => ({ buySlot, commitMint, attemptSwap, attemptBadReveal, refreshIntel }),
     [buySlot, commitMint, attemptSwap, attemptBadReveal, refreshIntel],
   );
 
   return (
-    <IntelContext.Provider value={value}>
+    <IntelContext.Provider value={world}>
       <ActionsContext.Provider value={actions}>{children}</ActionsContext.Provider>
     </IntelContext.Provider>
   );

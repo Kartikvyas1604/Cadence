@@ -26,19 +26,25 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
   // deterministic preview only — the commit itself gets a fresh random salt
   // inside the provider, so nothing random is rendered during SSR/hydration
   const H = useMemo(
-    () => commitHash(size, s.epochId, "preview"),
-    [size, s.epochId],
+    () => commitHash(size, s.chain.epochId ?? 0, "preview"),
+    [size, s.chain.epochId],
   );
 
-  const cost = size * s.slotPricePerEth;
-  const insufficient = cost > s.wallet.eth;
+  const cost = s.slotPricePerEth !== null ? size * s.slotPricePerEth : null;
+  const insufficient =
+    cost !== null && s.wallet.eth !== null && cost > s.wallet.eth;
   const liveCommitment =
-    s.wallet.slot && s.wallet.slot.epochId === s.epochId && s.wallet.slot.commitmentId != null
+    s.wallet.slot &&
+    s.chain.epochId !== null &&
+    s.wallet.slot.epochId === s.chain.epochId &&
+    s.wallet.slot.commitmentId != null
       ? s.commitments.find((c) => c.id === s.wallet.slot!.commitmentId) ?? null
       : null;
+  const connected = s.wallet.address !== null;
+  const contractsReady = s.pool !== null;
 
   async function handleCommit() {
-    if (pending || insufficient) return;
+    if (pending || insufficient || cost === null || !connected || !contractsReady) return;
     setPending("commit");
     try {
       await commitMint(size);
@@ -48,7 +54,7 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
   }
 
   async function handleReveal() {
-    if (pending || !liveCommitment) return;
+    if (pending || !liveCommitment || !connected || !contractsReady) return;
     setPending("reveal");
     try {
       await attemptSwap(liveCommitment.size);
@@ -58,7 +64,7 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
   }
 
   async function handleBadReveal() {
-    if (pending || !liveCommitment) return;
+    if (pending || !liveCommitment || !connected || !contractsReady) return;
     setPending("bad");
     try {
       await attemptBadReveal(liveCommitment.size);
@@ -82,6 +88,9 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
         </div>
         <p className="mt-2 truncate font-mono text-xs tabular-nums text-info">
           {shortHash(H)}
+          {s.chain.epochId === null ? (
+            <span className="ml-2 text-muted">epoch —</span>
+          ) : null}
         </p>
         <p className="mt-1 font-mono text-[11px] text-muted">
           salt · generated fresh at commit · revealed at consume
@@ -114,7 +123,7 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
       <button
         type="button"
         onClick={handleCommit}
-        disabled={pending !== null || insufficient}
+        disabled={pending !== null || insufficient || cost === null || !connected || !contractsReady}
         aria-busy={pending === "commit"}
         className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-info font-medium text-background transition-colors duration-100 hover:opacity-90 active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
       >
@@ -128,14 +137,29 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
         )}
       </button>
       <p className="mt-3 text-center font-mono text-[11px] text-muted">
-        ask {fmtPricePerEth(s.slotPricePerEth)} <EthIcon /> / 1 <EthIcon /> cap ·
-        total {fmtEth(cost, 4)} <EthIcon />
+        ask{" "}
+        {s.slotPricePerEth !== null ? (
+          <>
+            {fmtPricePerEth(s.slotPricePerEth)} <EthIcon /> / 1 <EthIcon /> cap
+          </>
+        ) : (
+          "— not written"
+        )}{" "}
+        · total{" "}
+        {cost !== null ? (
+          <>
+            {fmtEth(cost, 4)} <EthIcon />
+          </>
+        ) : (
+          "—"
+        )}
       </p>
 
       {liveCommitment ? (
         <div className="mt-5 rounded-md border border-info/40 bg-info/5 p-4">
           <p className="font-mono text-[11px] uppercase tracking-widest text-info">
-            intent held · epoch #{s.epochId}
+            intent held · epoch{" "}
+            {s.chain.epochId !== null ? `#${s.chain.epochId}` : "—"}
           </p>
           <div className="mt-3 grid grid-cols-2 gap-y-2 font-mono text-sm">
             <span className="text-muted">H</span>

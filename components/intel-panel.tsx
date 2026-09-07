@@ -41,7 +41,9 @@ export function IntelPanel({ className = "" }: { className?: string }) {
             current ask
           </p>
           <p className="mt-1 font-mono text-2xl font-medium tabular-nums text-accent-strong">
-            {fmtPricePerEth(s.slotPricePerEth)}{" "}
+            {s.slotPricePerEth !== null
+              ? fmtPricePerEth(s.slotPricePerEth)
+              : "—"}{" "}
             <span className="text-sm text-muted">
               <EthIcon /> / 1 <EthIcon /> capacity
             </span>
