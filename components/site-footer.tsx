@@ -1,9 +1,11 @@
+import { ApronLogo } from "./logo";
+
 export function SiteFooter() {
   return (
     <footer className="mt-16 border-t border-border">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-10 md:flex-row md:items-start md:justify-between md:px-6 lg:px-8">
         <div className="max-w-md space-y-2">
-          <p className="font-serif text-xl text-foreground">Apron</p>
+          <ApronLogo compact />
           <p className="text-sm leading-6 text-muted">
             Scarce per-epoch execution capacity as ERC-1155 apron slots on a
             Uniswap v4 hook. Unused apron slots expire worthless. A slot is

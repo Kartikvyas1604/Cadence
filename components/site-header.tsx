@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ApronLogo } from "./logo";
 
 export function SiteHeader() {
   return (
@@ -6,15 +7,10 @@ export function SiteHeader() {
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 md:px-6 lg:px-8">
         <Link
           href="/"
-          className="flex items-baseline gap-2 rounded-sm"
+          className="rounded-sm"
           aria-label="Apron home"
         >
-          <span className="font-serif text-2xl leading-none tracking-tight text-foreground">
-            Apron
-          </span>
-          <span className="hidden font-mono text-[11px] uppercase tracking-widest text-muted sm:inline">
-            epoch execution capacity
-          </span>
+          <ApronLogo />
         </Link>
 
         <div className="flex items-center gap-2">
