@@ -49,6 +49,7 @@ function appendPrice(
       passiveUsd: pool.passiveReserveUsdc / pool.passiveReserveEth,
       activeEth: pool.activeReserveEth,
       passiveEth: pool.passiveReserveEth,
+      ts: Date.now(),
       swap,
     },
   ].slice(-MAX_PRICE_POINTS);
@@ -96,6 +97,8 @@ function seedPriceHistory(
       passiveUsd,
       activeEth,
       passiveEth: 90,
+      // seeded as if each block landed one interval apart
+      ts: Date.now() - (SEED_POINTS - i) * BLOCK_INTERVAL_MS,
     });
   }
   return pts;

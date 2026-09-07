@@ -121,6 +121,8 @@ export interface PricePoint {
   activeEth: number;
   /** passive reserve depth, in ETH — flat within an epoch */
   passiveEth: number;
+  /** wall-clock time the block landed — anchors tape scroll/ease */
+  ts: number;
   swap?: { sizeEth: number; outUsdc: number };
 }
 

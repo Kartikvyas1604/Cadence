@@ -8,7 +8,6 @@ import {
   useMemo,
   useReducer,
   useRef,
-  useTransition,
 } from "react";
 import {
   BLOCK_INTERVAL_MS,
@@ -36,16 +35,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, createWorld);
-  const [, startTransition] = useTransition();
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
   useEffect(() => {
-    const t = setInterval(() => {
-      startTransition(() => dispatch({ type: "TICK" }));
-    }, BLOCK_INTERVAL_MS);
+    const t = setInterval(() => dispatch({ type: "TICK" }), BLOCK_INTERVAL_MS);
     return () => clearInterval(t);
   }, []);
 

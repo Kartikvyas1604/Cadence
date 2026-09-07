@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useCadence } from "@/lib/cadence/provider";
 import { BLOCK_INTERVAL_MS } from "@/lib/cadence/machine";
 import { fmtUsdc } from "@/lib/cadence/format";
@@ -18,57 +18,53 @@ export function PriceChart({ className = "" }: { className?: string }) {
   const newest = points[points.length - 1];
 
   // ——— tape motion ———
-  // A single mount-scoped rAF loop drives everything. The tape scrolls left
-  // at constant velocity (one slot per block interval) and the head value
-  // eases toward the newest price across the whole interval — so the line
-  // is always in motion, never snapping or freezing between blocks.
-  const dataRef = useRef(points);
+  // Motion is anchored to the data itself: each point carries the wall-clock
+  // time it landed (ts), so scroll position and head value are pure functions
+  // of (now - newest.ts). Appends can never cause a jump — the new head
+  // starts at frac=0 exactly where the previous head drifted to. A single
+  // mount-scoped rAF loop only supplies the current time.
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
-    dataRef.current = points;
-  }, [points]);
-
-  const [motion, setMotion] = useState<{ phase: number; head: number } | null>(
-    null,
-  );
-
-  useEffect(() => {
-    const reduced =
+    if (
       typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let raf = 0;
-    let lastBlock = -1;
-    let t0 = 0;
-    const loop = (now: number) => {
-      const cur = dataRef.current;
-      const top = cur[cur.length - 1];
-      // the block number is the tick clock — advances exactly once per block
-      if (top && top.block !== lastBlock) {
-        lastBlock = top.block;
-        t0 = now;
-      }
-      const prev = cur[cur.length - 2];
-      if (top && prev) {
-        const phase = reduced ? 1 : Math.min(1, (now - t0) / BLOCK_INTERVAL_MS);
-        const e = 1 - Math.pow(1 - phase, 3);
-        setMotion({
-          phase,
-          head: prev.activeUsd + (top.activeUsd - prev.activeUsd) * e,
-        });
-      }
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return; // static tape
+    }
+    let raf = requestAnimationFrame(function loop() {
+      setNow(Date.now());
       raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
+    });
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const headValue = motion ? motion.head : (newest?.activeUsd ?? 0);
-  const phase = motion ? motion.phase : 0;
+  // time since the newest block landed, 0..1 across the block interval
+  const frac =
+    now !== null && newest
+      ? Math.min(1, Math.max(0, (now - newest.ts) / BLOCK_INTERVAL_MS))
+      : 0;
+  const e = 1 - Math.pow(1 - frac, 3);
 
-  // y-domain from RAW points only — the interpolated head stays inside it,
-  // so the axis never wobbles while the head animates
-  const actives = points.map((p) => p.activeUsd);
-  const passives = points.map((p) => p.passiveUsd);
-  const values = [...actives, ...passives];
+  // interpolated head: eases from the previous price to the newest price
+  // across the whole interval — the line is always gliding, never freezing
+  const fromV =
+    points.length >= 2
+      ? points[points.length - 2].activeUsd
+      : (newest?.activeUsd ?? 0);
+  const toV = newest?.activeUsd ?? 0;
+  const headValue = fromV + (toV - fromV) * e;
+
+  // rendered points: the newest point carries the interpolated head value
+  const displayPoints = (() => {
+    if (!points.length) return points;
+    const pts = points.slice();
+    pts[pts.length - 1] = { ...pts[pts.length - 1], activeUsd: headValue };
+    return pts;
+  })();
+
+  // y-domain — head value is interpolated between two raw points, so it
+  // can never leave the raw range and the axis never wobbles
+  const values = displayPoints.flatMap((p) => [p.activeUsd, p.passiveUsd]);
   let min = Math.min(...values);
   let max = Math.max(...values);
   if (max - min < 1e-6) {
@@ -84,10 +80,11 @@ export function PriceChart({ className = "" }: { className?: string }) {
   const plotW = plotR - plotL;
   const base = H - PAD.bottom;
 
-  // fixed slot width — the head sits at the right edge and history flows
-  // left; one slot per block, forever. No rescaling, ever.
+  // fixed slot width, forever. Head pinned to the right edge, history
+  // flows left at constant velocity.
   const step = plotW / (VISIBLE - 1);
-  const x = (i: number) => plotR - (points.length - 1 - i + phase) * step;
+  const headX = plotR - frac * step;
+  const x = (i: number) => headX - (points.length - 1 - i) * step;
   const y = (v: number) =>
     PAD.top + (1 - (v - min) / (max - min)) * (base - PAD.top);
 
@@ -98,8 +95,8 @@ export function PriceChart({ className = "" }: { className?: string }) {
       )
       .join(" ");
 
-  const activePath = line(actives);
-  const passivePath = line(passives);
+  const activePath = line(displayPoints.map((p) => p.activeUsd));
+  const passivePath = line(displayPoints.map((p) => p.passiveUsd));
   const areaPath =
     points.length > 1
       ? `${activePath} L${x(points.length - 1).toFixed(2)} ${base} L${x(0).toFixed(2)} ${base} Z`
@@ -159,6 +156,17 @@ export function PriceChart({ className = "" }: { className?: string }) {
             role="img"
             aria-label={`Active-side price ${fmtUsdc(last.activeUsd, 2)} USDC per ETH, passive-side price ${fmtUsdc(last.passiveUsd, 2)} USDC per ETH, per block`}
           >
+            <defs>
+              <clipPath id="tape-plot">
+                <rect
+                  x={plotL}
+                  y={PAD.top}
+                  width={plotW}
+                  height={base - PAD.top}
+                />
+              </clipPath>
+            </defs>
+
             {[0.25, 0.5, 0.75].map((f) => (
               <line
                 key={f}
@@ -172,66 +180,68 @@ export function PriceChart({ className = "" }: { className?: string }) {
               />
             ))}
 
-            {epochSeams.map((i) => (
-              <line
-                key={`e${i}`}
-                x1={x(i)}
-                x2={x(i)}
-                y1={PAD.top}
-                y2={base}
-                stroke="var(--border-strong)"
-                strokeWidth="1"
-                strokeDasharray="2 6"
+            <g clipPath="url(#tape-plot)">
+              {epochSeams.map((i) => (
+                <line
+                  key={`e${i}`}
+                  x1={x(i)}
+                  x2={x(i)}
+                  y1={PAD.top}
+                  y2={base}
+                  stroke="var(--border-strong)"
+                  strokeWidth="1"
+                  strokeDasharray="2 6"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+
+              {areaPath ? (
+                <path d={areaPath} fill="var(--accent)" opacity="0.07" />
+              ) : null}
+
+              <path
+                d={passivePath}
+                fill="none"
+                stroke="var(--muted)"
+                strokeWidth="1.5"
+                strokeDasharray="5 5"
+                opacity="0.55"
                 vectorEffect="non-scaling-stroke"
               />
-            ))}
 
-            {areaPath ? (
-              <path d={areaPath} fill="var(--accent)" opacity="0.07" />
-            ) : null}
+              <path
+                d={activePath}
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
 
-            <path
-              d={passivePath}
-              fill="none"
-              stroke="var(--muted)"
-              strokeWidth="1.5"
-              strokeDasharray="5 5"
-              opacity="0.55"
-              vectorEffect="non-scaling-stroke"
-            />
+              {displayPoints.map(
+                (p, i) =>
+                  p.swap ? (
+                    <circle
+                      key={`s${p.block}-${i}`}
+                      cx={x(i)}
+                      cy={y(p.activeUsd)}
+                      r="4"
+                      fill="var(--accent)"
+                      stroke="var(--surface)"
+                      strokeWidth="1.5"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ) : null,
+              )}
 
-            <path
-              d={activePath}
-              fill="none"
-              stroke="var(--accent)"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-
-            {points.map(
-              (p, i) =>
-                p.swap ? (
-                  <circle
-                    key={`s${p.block}-${i}`}
-                    cx={x(i)}
-                    cy={y(p.activeUsd)}
-                    r="4"
-                    fill="var(--accent)"
-                    stroke="var(--surface)"
-                    strokeWidth="1.5"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ) : null,
-            )}
-
-            <circle
-              cx={x(points.length - 1)}
-              cy={y(headValue)}
-              r="3.5"
-              fill="var(--accent-strong)"
-            />
+              <circle
+                cx={headX}
+                cy={y(headValue)}
+                r="3.5"
+                fill="var(--accent-strong)"
+              />
+            </g>
           </svg>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-1 font-mono text-xs text-muted">
