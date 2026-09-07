@@ -2,6 +2,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Hero } from "@/components/hero";
 import { EpochBar } from "@/components/epoch-bar";
+import { DemoRunner } from "@/components/demo-runner";
 import { BuyApronPanel } from "@/components/buy-apron-panel";
 import { SwapPanel } from "@/components/swap-panel";
 import { RejectLogPanel } from "@/components/reject-log-panel";
@@ -48,8 +49,9 @@ export default function Home() {
         <Hero />
 
         <div className="mx-auto w-full max-w-7xl px-4 py-12 md:px-6 lg:px-8">
-          <div id="console" className="scroll-mt-20">
+          <div id="console" className="scroll-mt-20 space-y-6">
             <EpochBar />
+            <DemoRunner />
           </div>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-3">
