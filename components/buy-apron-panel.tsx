@@ -84,13 +84,12 @@ export function BuyApronPanel() {
         <legend className="mb-2 font-mono text-xs uppercase tracking-widest text-muted">
           capacity (trade size you may fill)
         </legend>
-        <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Slot capacity">
+        <div className="grid grid-cols-4 gap-2">
           {PRESETS.map((p) => (
             <button
               key={p}
               type="button"
-              role="radio"
-              aria-checked={size === p}
+              aria-pressed={size === p}
               onClick={() => setSize(p)}
               className={`h-11 rounded-md border font-mono text-sm tabular-nums transition-colors duration-100 ${
                 size === p
@@ -103,8 +102,7 @@ export function BuyApronPanel() {
           ))}
           <button
             type="button"
-            role="radio"
-            aria-checked={size === 10}
+            aria-pressed={size === 10}
             onClick={() => setSize(10)}
             className={`h-11 rounded-md border font-mono text-sm tabular-nums transition-colors duration-100 ${
               size === 10
