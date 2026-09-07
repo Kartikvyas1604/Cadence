@@ -1,7 +1,6 @@
 "use client";
 
 import { EpochBar } from "./epoch-bar";
-import { DemoRunner } from "./demo-runner";
 import { BuyCadencePanel } from "./buy-cadence-panel";
 import { SwapPanel } from "./swap-panel";
 import { RejectLogPanel } from "./reject-log-panel";
@@ -34,8 +33,8 @@ function FactsCard({ className = "" }: { className?: string }) {
         ))}
       </div>
       <p className="mt-6 border-t border-border pt-4 text-xs leading-5 text-muted">
-        Demo runs on an Anvil fork. Explicitly not TAP / Dockyard / Parity. No
-        fake APY. No finalist guarantee.
+        Explicitly not TAP / Dockyard / Parity. No fake APY. No finalist
+        guarantee.
       </p>
     </section>
   );
@@ -59,7 +58,6 @@ export function ConsoleView() {
 
         <div className="mt-8 space-y-6">
           <EpochBar />
-          <DemoRunner />
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">

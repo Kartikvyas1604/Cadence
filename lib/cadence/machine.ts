@@ -10,15 +10,6 @@ export const USDC_START = 25_000;
 
 const MAX_PRICE_POINTS = 180;
 
-const TRADERS = [
-  "0x3fA9…c21B",
-  "0x88dE…04a7",
-  "0x1c0F…9eD3",
-  "0xbE42…77aF",
-  "0x77AA…d910",
-  "0x09Fe…b6C4",
-];
-
 let nextEventId = 1;
 export function takeEventId(): number {
   return nextEventId++;
@@ -27,10 +18,6 @@ export function takeEventId(): number {
 let nextCommitmentId = 1;
 function takeCommitmentId(): number {
   return nextCommitmentId++;
-}
-
-export function otherTrader(): string {
-  return TRADERS[Math.floor(Math.random() * TRADERS.length)];
 }
 
 function appendPrice(
@@ -53,55 +40,6 @@ function appendPrice(
       swap,
     },
   ].slice(-MAX_PRICE_POINTS);
-}
-
-const SEED_POINTS = 120;
-
-/** Deterministic PRNG so the seeded history renders identically on server and client. */
-function seedNoise(i: number): number {
-  let s = (i * 2654435761) % 4294967296;
-  s ^= s << 13;
-  s >>>= 0;
-  s ^= s >>> 17;
-  s ^= s << 5;
-  s >>>= 0;
-  return s / 4294967296;
-}
-
-/**
- * 120 blocks of prior pool history so the tape opens full instead of empty.
- * Fully deterministic — no Date.now / Math.random — so hydration never mismatches.
- */
-function seedPriceHistory(
-  startBlock: number,
-  startEpoch: number,
-  epochLength: number,
-): PricePoint[] {
-  const pts: PricePoint[] = [];
-  const firstEpoch = startEpoch - epochLength;
-  for (let i = 0; i < SEED_POINTS; i++) {
-    const inEpoch = i % epochLength;
-    const epochId = firstEpoch + Math.floor(i / epochLength);
-    const n = seedNoise(i);
-    // active price wanders gently around the pool spot
-    const activeUsd =
-      2500 + Math.sin(i / 6) * 10 + (n - 0.5) * 6;
-    // passive reprices only at refresh — a flat step per epoch
-    const passiveUsd = 2496 + ((epochId * 7) % 11);
-    // active depth drains through the epoch, resets at refresh
-    const activeEth = 30 - inEpoch * 0.55 + (n - 0.5) * 0.4;
-    pts.push({
-      block: startBlock - (SEED_POINTS - i),
-      epochId,
-      activeUsd,
-      passiveUsd,
-      activeEth,
-      passiveEth: 90,
-      // seeded as if each block landed one interval apart
-      ts: Date.now() - (SEED_POINTS - i) * BLOCK_INTERVAL_MS,
-    });
-  }
-  return pts;
 }
 
 export function createWorld(): WorldState {
@@ -134,11 +72,7 @@ export function createWorld(): WorldState {
     rejects: [],
     commitments: [],
     swaps: [],
-    priceHistory: seedPriceHistory(
-      41_200_100,
-      3_204,
-      EPOCH_LENGTH_BLOCKS,
-    ),
+    priceHistory: [],
     lastIntelError: null,
   };
 }
@@ -255,40 +189,11 @@ export function reducer(state: WorldState, action: Action): WorldState {
       const block = state.blockNumber + 1;
       const remaining = state.blocksUntilEpochEnd - 1;
       if (remaining > 0) {
-        // Ambient solver flow consumes active depth within the same block —
-        // folded into TICK so the tape appends exactly one point per block.
-        let pool = state.pool;
-        let graph = state.graph;
-        if (Math.random() < 0.3) {
-          const size = 0.4 + Math.random() * 1.8;
-          const out = quoteSwapOutUsdc(pool, size);
-          pool = {
-            ...pool,
-            activeReserveEth: pool.activeReserveEth + size,
-            activeReserveUsdc: pool.activeReserveUsdc - out,
-          };
-          if (Math.random() < 0.35) {
-            graph = [
-              {
-                id: takeEventId(),
-                kind: "consume",
-                epochId: state.epochId,
-                blockNumber: block,
-                size,
-                trader: otherTrader(),
-                ts: Date.now(),
-              },
-              ...graph,
-            ];
-          }
-        }
         return {
           ...state,
           blockNumber: block,
           blocksUntilEpochEnd: remaining,
-          pool,
-          priceHistory: appendPrice(pool, state.priceHistory, block, state.epochId),
-          graph,
+          priceHistory: appendPrice(state.pool, state.priceHistory, block, state.epochId),
         };
       }
       // Epoch refresh: expire prior seats, refresh active = λ × total, new epochId

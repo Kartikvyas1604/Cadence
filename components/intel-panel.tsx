@@ -116,10 +116,10 @@ export function IntelPanel({ className = "" }: { className?: string }) {
             aria-hidden
           />
           {pending
-            ? "Paying $0.05 on Hedera…"
+            ? "Fetching quote…"
             : s.intel
-              ? "Pay $0.05 · refresh quote"
-              : "Pay $0.05 · fetch quote"}
+              ? "Refresh quote"
+              : "Fetch quote"}
         </button>
         <p className="mt-3 text-center font-mono text-[11px] text-muted">
           {s.intelCalls} paid call{s.intelCalls === 1 ? "" : "s"} this session ·

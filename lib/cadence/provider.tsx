@@ -31,8 +31,6 @@ const ActionsContext = createContext<{
   refreshIntel: () => Promise<boolean>;
 } | null>(null);
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, createWorld);
   const stateRef = useRef(state);
@@ -46,14 +44,12 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const buySlot = useCallback(async (sizeEth: number) => {
-    await sleep(600); // simulated tx round-trip (Anvil fill)
     const s = stateRef.current;
     dispatch({ type: "BUY_SLOT", sizeEth, pricePerEth: s.intel?.suggestedAskPerEth ?? s.slotPricePerEth });
   }, []);
 
   // B2: commit-mint — H lands public, size stays client-side until reveal
   const commitMint = useCallback(async (sizeEth: number) => {
-    await sleep(700); // simulated tx round-trip
     const s = stateRef.current;
     dispatch({
       type: "COMMIT_MINT",
@@ -85,7 +81,6 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       sizeEth: number,
       opts: { withoutSlot?: boolean; oversize?: boolean; reachPassive?: boolean } = {},
     ): Promise<"filled" | RejectReason> => {
-      await sleep(500);
       const s = stateRef.current;
       const blocked = checkPreSwap(s, sizeEth, opts);
       if (blocked) {
@@ -117,7 +112,6 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   // D4 demo: reveal with a wrong salt — hook must revert
   const attemptBadReveal = useCallback(
     async (sizeEth: number): Promise<"filled" | RejectReason> => {
-      await sleep(500);
       const s = stateRef.current;
       const slot = s.wallet.slot;
       const c =
@@ -134,31 +128,25 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   );
 
   const refreshIntel = useCallback(async (): Promise<boolean> => {
-    await sleep(1400); // x402 round-trip: pay on Hedera, receive signed quote
-    if (Math.random() < 0.12) {
-      dispatch({ type: "INTEL_ERROR", message: "x402 settlement timed out. No charge made — try again." });
+    try {
+      const res = await fetch("/api/intel", { method: "POST" });
+      if (!res.ok) {
+        dispatch({
+          type: "INTEL_ERROR",
+          message: `intel endpoint returned ${res.status} — paid x402 intel is not configured yet`,
+        });
+        return false;
+      }
+      const body = (await res.json()) as IntelQuote;
+      dispatch({ type: "INTEL_QUOTE", quote: body });
+      return true;
+    } catch {
+      dispatch({
+        type: "INTEL_ERROR",
+        message: "intel endpoint unreachable — paid x402 intel is not configured yet",
+      });
       return false;
     }
-    const s = stateRef.current;
-    const utilization =
-      1 -
-      s.pool.activeReserveEth /
-        (s.pool.lambdaBps / 10_000) /
-        (s.pool.activeReserveEth + s.pool.passiveReserveEth);
-    const toxicFlow = Math.min(1, s.rejects.length / 8);
-    const base = 0.0016;
-    const suggested = Number(
-      (base * (1 + utilization * 1.4 + toxicFlow * 0.8) * (1 + (Math.random() - 0.3) * 0.15)).toFixed(5),
-    );
-    const quote: IntelQuote = {
-      suggestedAskPerEth: suggested,
-      asOf: Date.now(),
-      rationale: `Active utilization ${(utilization * 100).toFixed(0)}% · toxicity proxy from ${s.rejects.length} rejects this session. Capacity is ${utilization > 0.5 ? "scarce — raise the ask" : "ample — hold the ask"}.`,
-      source: "hedera:x402 · blocky402 intel node",
-      costUsd: 0.05,
-    };
-    dispatch({ type: "INTEL_QUOTE", quote });
-    return true;
   }, []);
 
   const value = state;
