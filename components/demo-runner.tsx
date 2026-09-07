@@ -9,11 +9,13 @@ const STEPS = [
   "Swapping 2 ETH with the slot — expect a fill…",
   "Swapping again without a slot — expect a revert…",
   "Swapping oversize — expect a revert…",
+  "Commit-mint 1.5 ETH private intent — only H lands public…",
+  "Reveal (size, salt) at beforeSwap — expect a fill…",
   "Paying $0.05 on Hedera for the capacity ask…",
 ] as const;
 
 export function DemoRunner() {
-  const { buySlot, attemptSwap, refreshIntel } = useCadenceActions();
+  const { buySlot, commitMint, attemptSwap, refreshIntel } = useCadenceActions();
   const [running, setRunning] = useState(false);
   const [step, setStep] = useState(-1);
 
@@ -39,13 +41,21 @@ export function DemoRunner() {
       await pause(1100);
 
       setStep(4);
+      await commitMint(1.5);
+      await pause(1200);
+
+      setStep(5);
+      await attemptSwap(1.5);
+      await pause(1100);
+
+      setStep(6);
       await refreshIntel();
       await pause(900);
     } finally {
       setStep(-1);
       setRunning(false);
     }
-  }, [running, buySlot, attemptSwap, refreshIntel]);
+  }, [running, buySlot, commitMint, attemptSwap, refreshIntel]);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-accent/30 bg-accent/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -66,7 +76,7 @@ export function DemoRunner() {
               {STEPS[step]}
             </>
           ) : (
-            "Plays the whole loop: buy slot → fill → reject without → reject oversize → paid intel."
+            "Plays the whole loop: buy slot → fill → reject without → reject oversize → commit-mint → reveal fill → paid intel."
           )}
         </p>
       </div>

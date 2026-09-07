@@ -4,6 +4,7 @@ import { Activity } from "lucide-react";
 import { Panel } from "./panel";
 import { EthIcon } from "./eth-icon";
 import { useCadence } from "@/lib/cadence/provider";
+import { shortHash } from "@/lib/cadence/hash";
 import { fmtBlock, fmtEth, fmtPricePerEth, timeAgo } from "@/lib/cadence/format";
 import type { GraphEventKind } from "@/lib/cadence/types";
 
@@ -11,6 +12,8 @@ const KIND_STYLE: Record<GraphEventKind, { label: string; cls: string }> = {
   mint: { label: "mint", cls: "border-accent/50 text-accent-strong" },
   burn: { label: "burn", cls: "border-danger/50 text-danger" },
   consume: { label: "consume", cls: "border-success/50 text-success" },
+  commit: { label: "commit", cls: "border-info/50 text-info" },
+  reveal: { label: "reveal", cls: "border-success/50 text-success" },
 };
 
 export function GraphPanel({ className = "" }: { className?: string }) {
@@ -32,7 +35,7 @@ export function GraphPanel({ className = "" }: { className?: string }) {
       id="graph"
       step="4 · index"
       title="Graph panel"
-      caption="Live Studio subgraph — cadence slot mint / burn / consume, indexed per epoch."
+      caption="Live Studio subgraph — cadence slot mint / burn / consume / commit → reveal, indexed per epoch."
     >
       <dl className="mb-4 grid grid-cols-3 gap-px overflow-hidden rounded-md border border-border bg-border font-mono text-sm">
         {(
@@ -84,13 +87,28 @@ export function GraphPanel({ className = "" }: { className?: string }) {
                 </span>
               </div>
               <div className="shrink-0 text-right font-mono text-xs tabular-nums">
-                <span className="text-foreground">{fmtEth(e.size)} <EthIcon /></span>
-                <span className="ml-2 text-muted">{timeAgo(e.ts)}</span>
-                {e.kind === "mint" && e.pricePaid ? (
-                  <span className="ml-2 text-accent">
-                    @ {fmtPricePerEth(e.pricePaid / e.size)} <EthIcon />
-                  </span>
-                ) : null}
+                {e.kind === "commit" && e.H ? (
+                  <>
+                    <span className="text-info">H {shortHash(e.H)}</span>
+                    <span className="ml-2 text-muted">size hidden</span>
+                    <span className="ml-2 text-muted">{timeAgo(e.ts)}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-foreground">
+                      {fmtEth(e.size)} <EthIcon />
+                    </span>
+                    {e.fromCommitment ? (
+                      <span className="ml-2 text-info">revealed</span>
+                    ) : null}
+                    <span className="ml-2 text-muted">{timeAgo(e.ts)}</span>
+                    {e.kind === "mint" && e.pricePaid ? (
+                      <span className="ml-2 text-accent">
+                        @ {fmtPricePerEth(e.pricePaid / e.size)} <EthIcon />
+                      </span>
+                    ) : null}
+                  </>
+                )}
               </div>
             </li>
           ))}

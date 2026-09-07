@@ -12,6 +12,7 @@ const REASON_STYLE: Record<RejectReason, string> = {
   "no-slot": "border-danger/50 text-danger",
   oversize: "border-danger/50 text-danger",
   "same-block-passive-unlock": "border-info/50 text-info",
+  "bad-reveal": "border-danger/50 text-danger",
 };
 
 export function RejectLogPanel({ className = "" }: { className?: string }) {

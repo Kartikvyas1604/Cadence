@@ -60,6 +60,11 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
                 end of epoch #{s.epochId} ({s.blocksUntilEpochEnd} blocks)
               </dd>
             </dl>
+            {slot.commitmentId != null ? (
+              <p className="mt-3 font-mono text-[11px] leading-5 text-info">
+                private intent — size reveals at beforeSwap, not before
+              </p>
+            ) : null}
           </div>
           <p className="mt-3 text-xs leading-5 text-muted">
             Buying again replaces nothing — capacity stacks until the epoch

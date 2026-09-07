@@ -8,6 +8,7 @@ import { RejectLogPanel } from "./reject-log-panel";
 import { GraphPanel } from "./graph-panel";
 import { IntelPanel } from "./intel-panel";
 import { PriceChart } from "./price-chart";
+import { PrivateIntentPanel } from "./private-intent-panel";
 
 const FACTS = [
   ["Invariant", "Passive reserves cannot unlock via same-block order splitting."],
@@ -68,7 +69,8 @@ export function ConsoleView() {
           <PriceChart className="lg:col-span-2" />
           <IntelPanel className="lg:col-span-1" />
           <GraphPanel className="lg:col-span-2" />
-          <FactsCard className="lg:col-span-3" />
+          <PrivateIntentPanel className="lg:col-span-1" />
+          <FactsCard className="lg:col-span-2" />
         </div>
       </div>
     </main>

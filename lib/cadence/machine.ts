@@ -1,5 +1,6 @@
 import type { GraphEvent, IntelQuote, PricePoint, RejectEvent, WorldState } from "./types";
-import { DEFAULT_ASK_PER_ETH } from "./types";
+import { DEFAULT_ASK_PER_ETH, REJECT_REASONS } from "./types";
+import { commitHash } from "./hash";
 
 export const LAMBDA_BPS = 2500;
 export const EPOCH_LENGTH_BLOCKS = 12;
@@ -23,6 +24,11 @@ export function takeEventId(): number {
   return nextEventId++;
 }
 
+let nextCommitmentId = 1;
+function takeCommitmentId(): number {
+  return nextCommitmentId++;
+}
+
 export function otherTrader(): string {
   return TRADERS[Math.floor(Math.random() * TRADERS.length)];
 }
@@ -41,6 +47,8 @@ function appendPrice(
       epochId,
       activeUsd: pool.activeReserveUsdc / pool.activeReserveEth,
       passiveUsd: pool.passiveReserveUsdc / pool.passiveReserveEth,
+      activeEth: pool.activeReserveEth,
+      passiveEth: pool.passiveReserveEth,
       swap,
     },
   ].slice(-MAX_PRICE_POINTS);
@@ -74,6 +82,7 @@ export function createWorld(): WorldState {
     intelCalls: 0,
     graph: [],
     rejects: [],
+    commitments: [],
     swaps: [],
     priceHistory: [],
     lastIntelError: null,
@@ -83,11 +92,98 @@ export function createWorld(): WorldState {
 export type Action =
   | { type: "TICK" }
   | { type: "BUY_SLOT"; sizeEth: number; pricePerEth: number }
+  | { type: "COMMIT_MINT"; sizeEth: number; pricePerEth: number; salt: string }
+  | { type: "REVEAL_SWAP"; sizeEth: number; salt: string }
   | { type: "SWAP_SUCCEEDED"; sizeEth: number; outUsdc: number; capacityUsed: number }
   | { type: "SWAP_REJECTED"; reason: RejectEvent["reason"]; tradeSize: number; detail: string }
   | { type: "OTHERS_CONSUME" }
   | { type: "INTEL_QUOTE"; quote: IntelQuote }
   | { type: "INTEL_ERROR"; message: string };
+
+function addReject(
+  state: WorldState,
+  reason: RejectEvent["reason"],
+  tradeSize: number,
+  detail: string,
+): WorldState {
+  return {
+    ...state,
+    rejects: [
+      {
+        id: takeEventId(),
+        reason,
+        epochId: state.epochId,
+        blockNumber: state.blockNumber,
+        tradeSize,
+        detail,
+        ts: Date.now(),
+      },
+      ...state.rejects,
+    ],
+  };
+}
+
+/** Shared fill path for the public swap and the reveal-on-consume path. */
+function fillSwap(
+  state: WorldState,
+  sizeEth: number,
+  outUsdc: number,
+  capacityUsed: number,
+  fromCommitment: boolean,
+): WorldState {
+  const k = state.pool.activeReserveEth * state.pool.activeReserveUsdc;
+  const newEth = state.pool.activeReserveEth + sizeEth;
+  const newUsdc = k / newEth;
+  const pool = {
+    ...state.pool,
+    activeReserveEth: newEth,
+    activeReserveUsdc: newUsdc,
+    passiveReserveEth: state.pool.passiveReserveEth,
+    passiveReserveUsdc: state.pool.passiveReserveUsdc,
+  };
+  return {
+    ...state,
+    wallet: {
+      ...state.wallet,
+      usdc: state.wallet.usdc + outUsdc,
+      slot: {
+        epochId: state.epochId,
+        capacity: Math.max(0, state.wallet.slot!.capacity - capacityUsed),
+      },
+    },
+    pool,
+    swaps: [
+      {
+        epochId: state.epochId,
+        blockNumber: state.blockNumber,
+        sizeEth,
+        outUsdc,
+        ts: Date.now(),
+      },
+      ...state.swaps,
+    ],
+    priceHistory: appendPrice(
+      pool,
+      state.priceHistory,
+      state.blockNumber,
+      state.epochId,
+      { sizeEth, outUsdc },
+    ),
+    graph: [
+      {
+        id: takeEventId(),
+        kind: "consume",
+        epochId: state.epochId,
+        blockNumber: state.blockNumber,
+        size: capacityUsed,
+        fromCommitment,
+        trader: state.wallet.address,
+        ts: Date.now(),
+      },
+      ...state.graph,
+    ],
+  };
+}
 
 /** Quote output of swapping sizeEth into the ACTIVE side only (constant product). */
 export function quoteSwapOutUsdc(
@@ -146,6 +242,12 @@ export function reducer(state: WorldState, action: Action): WorldState {
         wallet: { ...state.wallet, slot: null },
         graph,
         pool,
+        // unrevealed Private Cadence Intents expire with the epoch
+        commitments: state.commitments.map((c) =>
+          c.status === "committed" && c.epochId === state.epochId
+            ? { ...c, status: "expired" as const }
+            : c,
+        ),
         priceHistory: appendPrice(pool, state.priceHistory, block, state.epochId + 1),
       };
     }
@@ -176,51 +278,43 @@ export function reducer(state: WorldState, action: Action): WorldState {
     }
 
     case "SWAP_SUCCEEDED": {
-      const k = state.pool.activeReserveEth * state.pool.activeReserveUsdc;
-      const newEth = state.pool.activeReserveEth + action.sizeEth;
-      const newUsdc = k / newEth;
-      const pool = {
-        ...state.pool,
-        activeReserveEth: newEth,
-        activeReserveUsdc: newUsdc,
-        passiveReserveEth: state.pool.passiveReserveEth,
-        passiveReserveUsdc: state.pool.passiveReserveUsdc,
-      };
+      return fillSwap(state, action.sizeEth, action.outUsdc, action.capacityUsed, false);
+    }
+
+    case "COMMIT_MINT": {
+      // B2: pay fixed price, mint against H — size never enters the public payload
+      const cost = action.sizeEth * action.pricePerEth;
+      const H = commitHash(action.sizeEth, state.epochId, action.salt);
+      const id = takeCommitmentId();
       return {
         ...state,
         wallet: {
           ...state.wallet,
-          usdc: state.wallet.usdc + action.outUsdc,
-          slot: {
-            epochId: state.epochId,
-            capacity: Math.max(0, state.wallet.slot!.capacity - action.capacityUsed),
-          },
+          eth: state.wallet.eth - cost,
+          slot: { epochId: state.epochId, capacity: action.sizeEth, commitmentId: id },
         },
-        pool,
-        swaps: [
+        commitments: [
           {
+            id,
             epochId: state.epochId,
-            blockNumber: state.blockNumber,
-            sizeEth: action.sizeEth,
-            outUsdc: action.outUsdc,
+            H,
+            size: action.sizeEth,
+            salt: action.salt,
+            pricePaid: cost,
+            status: "committed",
             ts: Date.now(),
           },
-          ...state.swaps,
+          ...state.commitments,
         ],
-        priceHistory: appendPrice(
-          pool,
-          state.priceHistory,
-          state.blockNumber,
-          state.epochId,
-          { sizeEth: action.sizeEth, outUsdc: action.outUsdc },
-        ),
         graph: [
           {
             id: takeEventId(),
-            kind: "consume",
+            kind: "commit",
             epochId: state.epochId,
             blockNumber: state.blockNumber,
-            size: action.capacityUsed,
+            size: 0,
+            pricePaid: cost,
+            H,
             trader: state.wallet.address,
             ts: Date.now(),
           },
@@ -229,22 +323,45 @@ export function reducer(state: WorldState, action: Action): WorldState {
       };
     }
 
-    case "SWAP_REJECTED": {
-      return {
+    case "REVEAL_SWAP": {
+      // C1: revealAndConsume(size, salt) — verify hash, emit SlotRevealed, then fill
+      const slot = state.wallet.slot;
+      const c =
+        slot && slot.epochId === state.epochId && slot.commitmentId != null
+          ? state.commitments.find((x) => x.id === slot.commitmentId)
+          : null;
+      if (!c || c.status !== "committed") {
+        return addReject(state, "no-slot", action.sizeEth, REJECT_REASONS["no-slot"].detail);
+      }
+      if (commitHash(action.sizeEth, state.epochId, action.salt) !== c.H) {
+        return addReject(state, "bad-reveal", action.sizeEth, REJECT_REASONS["bad-reveal"].detail);
+      }
+      const revealed = state.commitments.map((x) =>
+        x.id === c.id ? { ...x, status: "revealed" as const, revealedSize: action.sizeEth } : x,
+      );
+      const withReveal: WorldState = {
         ...state,
-        rejects: [
+        commitments: revealed,
+        graph: [
           {
             id: takeEventId(),
-            reason: action.reason,
+            kind: "reveal",
             epochId: state.epochId,
             blockNumber: state.blockNumber,
-            tradeSize: action.tradeSize,
-            detail: action.detail,
+            size: action.sizeEth,
+            H: c.H,
+            trader: state.wallet.address,
             ts: Date.now(),
           },
-          ...state.rejects,
+          ...state.graph,
         ],
       };
+      const outUsdc = quoteSwapOutUsdc(state.pool, action.sizeEth);
+      return fillSwap(withReveal, action.sizeEth, outUsdc, action.sizeEth, true);
+    }
+
+    case "SWAP_REJECTED": {
+      return addReject(state, action.reason, action.tradeSize, action.detail);
     }
 
     case "OTHERS_CONSUME": {

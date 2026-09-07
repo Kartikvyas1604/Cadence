@@ -1,7 +1,8 @@
 export type RejectReason =
   | "no-slot"
   | "oversize"
-  | "same-block-passive-unlock";
+  | "same-block-passive-unlock"
+  | "bad-reveal";
 
 export interface RejectReasonMeta {
   code: RejectReason;
@@ -27,20 +28,51 @@ export const REJECT_REASONS: Record<RejectReason, RejectReasonMeta> = {
     detail:
       "beforeSwap reverted: order split would reach passive reserves in the same block.",
   },
+  "bad-reveal": {
+    code: "bad-reveal",
+    title: "Bad reveal",
+    detail:
+      "beforeSwap reverted: reveal(size, salt) does not hash to the committed H.",
+  },
 };
 
-export type GraphEventKind = "mint" | "burn" | "consume";
+export type GraphEventKind =
+  | "mint"
+  | "burn"
+  | "consume"
+  | "commit"
+  | "reveal";
 
 export interface GraphEvent {
   id: number;
   kind: GraphEventKind;
   epochId: number;
   blockNumber: number;
-  /** capacity notional, in ETH */
+  /** capacity notional, in ETH — 0 and hidden for commit events until reveal */
   size: number;
   /** paid for a mint, in ETH */
   pricePaid?: number;
+  /** commitment hash — present on commit / reveal events */
+  H?: string;
+  /** consume came from a revealed Private Cadence Intent */
+  fromCommitment?: boolean;
   trader: string;
+  ts: number;
+}
+
+export type CommitmentStatus = "committed" | "revealed" | "expired";
+
+export interface CadenceCommitment {
+  id: number;
+  epochId: number;
+  /** H = hash(size, epochId, salt) — public at commit */
+  H: string;
+  /** private until reveal */
+  size: number;
+  salt: string;
+  pricePaid: number;
+  status: CommitmentStatus;
+  revealedSize?: number;
   ts: number;
 }
 
@@ -67,7 +99,7 @@ export interface Wallet {
   eth: number;
   usdc: number;
   /** ERC-1155 balance: capacity notional held for the CURRENT epoch only */
-  slot: { epochId: number; capacity: number } | null;
+  slot: { epochId: number; capacity: number; commitmentId?: number } | null;
 }
 
 export interface PoolState {
@@ -85,6 +117,10 @@ export interface PricePoint {
   epochId: number;
   activeUsd: number;
   passiveUsd: number;
+  /** active reserve depth, in ETH — for the depth view */
+  activeEth: number;
+  /** passive reserve depth, in ETH — flat within an epoch */
+  passiveEth: number;
   swap?: { sizeEth: number; outUsdc: number };
 }
 
@@ -101,6 +137,7 @@ export interface WorldState {
   intelCalls: number;
   graph: GraphEvent[];
   rejects: RejectEvent[];
+  commitments: CadenceCommitment[];
   swaps: { epochId: number; blockNumber: number; sizeEth: number; outUsdc: number; ts: number }[];
   priceHistory: PricePoint[];
   lastIntelError: string | null;
