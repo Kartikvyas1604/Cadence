@@ -61,11 +61,11 @@ export function ConsoleView() {
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">
-          <BuyApronPanel />
-          <SwapPanel />
-          <RejectLogPanel />
-          <GraphPanel />
-          <IntelPanel />
+          <BuyApronPanel className="lg:col-span-1" />
+          <SwapPanel className="lg:col-span-2" />
+          <RejectLogPanel className="lg:col-span-1" />
+          <GraphPanel className="lg:col-span-2" />
+          <IntelPanel className="lg:col-span-1" />
           <FactsCard />
         </div>
       </div>

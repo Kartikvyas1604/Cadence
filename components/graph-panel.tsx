@@ -12,7 +12,7 @@ const KIND_STYLE: Record<GraphEventKind, { label: string; cls: string }> = {
   consume: { label: "consume", cls: "border-success/50 text-success" },
 };
 
-export function GraphPanel() {
+export function GraphPanel({ className = "" }: { className?: string }) {
   const s = useApron();
 
   const totals = s.graph.reduce(
@@ -27,11 +27,11 @@ export function GraphPanel() {
 
   return (
     <Panel
+      className={className}
       id="graph"
       step="4 · index"
       title="Graph panel"
       caption="Live Studio subgraph — apron slot mint / burn / consume, indexed per epoch."
-      className="lg:col-span-2"
     >
       <dl className="mb-4 grid grid-cols-3 gap-px overflow-hidden rounded-md border border-border bg-border font-mono text-sm">
         {(

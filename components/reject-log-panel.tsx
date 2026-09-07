@@ -13,16 +13,16 @@ const REASON_STYLE: Record<RejectReason, string> = {
   "same-block-passive-unlock": "border-info/50 text-info",
 };
 
-export function RejectLogPanel() {
+export function RejectLogPanel({ className = "" }: { className?: string }) {
   const s = useApron();
 
   return (
     <Panel
+      className={className}
       id="rejects"
       step="3 · reject"
       title="Reject log"
       caption="Every revert at beforeSwap, on-chain and public. This is the product."
-      className="lg:col-span-1"
     >
       <ul className="mb-4 space-y-1.5 font-mono text-[11px] leading-5 text-muted">
         {(Object.keys(REJECT_REASONS) as RejectReason[]).map((code) => (
@@ -32,7 +32,9 @@ export function RejectLogPanel() {
               className="mt-1.5 size-1 shrink-0 rounded-full bg-border-strong"
             />
             <span>
-              <span className="text-foreground/85">{REJECT_REASONS[code].title}</span>{" "}
+              <span className="text-foreground/85">
+                {REJECT_REASONS[code].title}
+              </span>{" "}
               — {code}
             </span>
           </li>

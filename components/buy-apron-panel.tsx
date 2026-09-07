@@ -8,7 +8,7 @@ import { fmtEth, fmtPricePerEth } from "@/lib/apron/format";
 
 const PRESETS = [1, 2, 5];
 
-export function BuyApronPanel() {
+export function BuyApronPanel({ className = "" }: { className?: string }) {
   const s = useApron();
   const { buySlot } = useApronActions();
   const [size, setSize] = useState<number>(2);
@@ -17,7 +17,8 @@ export function BuyApronPanel() {
   const ask = s.slotPricePerEth;
   const cost = size * ask;
   const insufficient = cost > s.wallet.eth;
-  const slot = s.wallet.slot && s.wallet.slot.epochId === s.epochId ? s.wallet.slot : null;
+  const slot =
+    s.wallet.slot && s.wallet.slot.epochId === s.epochId ? s.wallet.slot : null;
 
   async function handleBuy() {
     if (pending || insufficient) return;
@@ -31,11 +32,11 @@ export function BuyApronPanel() {
 
   return (
     <Panel
+      className={className}
       id="buy"
       step="1 · buy"
       title="Buy an apron slot"
       caption="ERC-1155, current epoch only. Fixed primary price. Unused slots expire worthless."
-      className="lg:col-span-1"
     >
       {slot ? (
         <div className="flex flex-1 flex-col">

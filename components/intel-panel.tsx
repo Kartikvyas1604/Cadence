@@ -1,12 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, RadioTower, RefreshCw, TriangleAlert } from "lucide-react";
+import {
+  CheckCircle2,
+  RadioTower,
+  RefreshCw,
+  TriangleAlert,
+} from "lucide-react";
 import { Panel } from "./panel";
 import { useApron, useApronActions } from "@/lib/apron/provider";
 import { fmtPricePerEth, timeAgo } from "@/lib/apron/format";
 
-export function IntelPanel() {
+export function IntelPanel({ className = "" }: { className?: string }) {
   const s = useApron();
   const { refreshIntel } = useApronActions();
   const [pending, setPending] = useState(false);
@@ -23,11 +28,11 @@ export function IntelPanel() {
 
   return (
     <Panel
+      className={className}
       id="intel"
       step="5 · intel"
       title="Pay for the ask"
       caption="Hedera x402 paid capacity/toxicity intel writes the apron-slot ask. One call, real payment."
-      className="lg:col-span-1"
     >
       <div className="flex flex-1 flex-col">
         <div className="rounded-md border border-border bg-surface-raised/50 p-4">
@@ -62,7 +67,9 @@ export function IntelPanel() {
             <dl className="mt-3 space-y-1 font-mono text-xs text-muted">
               <div className="flex justify-between gap-3">
                 <dt>source</dt>
-                <dd className="text-right text-foreground/85">{s.intel.source}</dd>
+                <dd className="text-right text-foreground/85">
+                  {s.intel.source}
+                </dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt>paid</dt>

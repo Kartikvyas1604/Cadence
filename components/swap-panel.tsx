@@ -17,7 +17,7 @@ const DEMO_TOGGLES = [
 
 type ToggleKey = (typeof DEMO_TOGGLES)[number]["key"];
 
-export function SwapPanel() {
+export function SwapPanel({ className = "" }: { className?: string }) {
   const s = useApron();
   const { attemptSwap } = useApronActions();
   const [size, setSize] = useState("2");
@@ -37,15 +37,15 @@ export function SwapPanel() {
   const slot =
     s.wallet.slot && s.wallet.slot.epochId === s.epochId ? s.wallet.slot : null;
   const outUsdc = quoteSwapOutUsdc(s.pool, sizeNum);
-  const impact =
-    sizeNum > 0 ? Math.abs(outUsdc / (s.pool.activeReserveUsdc)) : 0;
+  const impact = sizeNum > 0 ? Math.abs(outUsdc / s.pool.activeReserveUsdc) : 0;
   const spot = activePriceUsd(s.pool);
   const execPrice = sizeNum > 0 ? outUsdc / sizeNum : spot;
 
   const hasSlot = !!slot;
   const enoughCapacity = !!slot && sizeNum <= slot.capacity;
   const enoughDepth = sizeNum <= s.pool.activeReserveEth * 0.95;
-  const toggledAny = toggles.withoutSlot || toggles.oversize || toggles.reachPassive;
+  const toggledAny =
+    toggles.withoutSlot || toggles.oversize || toggles.reachPassive;
 
   const rejectionPreview = !hasSlot
     ? "no-slot"
@@ -79,11 +79,11 @@ export function SwapPanel() {
 
   return (
     <Panel
+      className={className}
       id="swap"
       step="2 · swap"
       title="Swap against active depth"
       caption="beforeSwap checks slot ≥ size, burns the notional, fills against active reserves only."
-      className="lg:col-span-2"
     >
       <div className="flex flex-1 flex-col gap-4">
         <div>
@@ -190,18 +190,25 @@ export function SwapPanel() {
           >
             {result.kind === "filled" ? (
               <div className="flex items-start gap-2.5">
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" aria-hidden />
+                <CheckCircle2
+                  className="mt-0.5 size-4 shrink-0 text-success"
+                  aria-hidden
+                />
                 <div className="text-sm leading-6">
                   <p className="font-medium text-success">Filled</p>
                   <p className="font-mono text-xs tabular-nums text-muted">
-                    swapped {fmtEth(result.sizeEth)} Ξ → {fmtUsdc(result.outUsdc)}{" "}
-                    USDC · slot notional burned · epoch #{s.epochId}
+                    swapped {fmtEth(result.sizeEth)} Ξ →{" "}
+                    {fmtUsdc(result.outUsdc)} USDC · slot notional burned ·
+                    epoch #{s.epochId}
                   </p>
                 </div>
               </div>
             ) : (
               <div className="flex items-start gap-2.5">
-                <XCircle className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden />
+                <XCircle
+                  className="mt-0.5 size-4 shrink-0 text-danger"
+                  aria-hidden
+                />
                 <div className="text-sm leading-6">
                   <p className="font-medium text-danger">
                     Reverted at beforeSwap
