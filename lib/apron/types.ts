@@ -1,0 +1,108 @@
+export type RejectReason =
+  | "no-slot"
+  | "oversize"
+  | "same-block-passive-unlock";
+
+export interface RejectReasonMeta {
+  code: RejectReason;
+  title: string;
+  detail: string;
+}
+
+export const REJECT_REASONS: Record<RejectReason, RejectReasonMeta> = {
+  "no-slot": {
+    code: "no-slot",
+    title: "No apron slot",
+    detail: "beforeSwap reverted: trader holds no apron slot for this epoch.",
+  },
+  oversize: {
+    code: "oversize",
+    title: "Oversize vs slot",
+    detail:
+      "beforeSwap reverted: trade size exceeds apron slot capacity for this epoch.",
+  },
+  "same-block-passive-unlock": {
+    code: "same-block-passive-unlock",
+    title: "Passive unlock attempt",
+    detail:
+      "beforeSwap reverted: order split would reach passive reserves in the same block.",
+  },
+};
+
+export type GraphEventKind = "mint" | "burn" | "consume";
+
+export interface GraphEvent {
+  id: number;
+  kind: GraphEventKind;
+  epochId: number;
+  blockNumber: number;
+  /** capacity notional, in ETH */
+  size: number;
+  /** paid for a mint, in ETH */
+  pricePaid?: number;
+  trader: string;
+  ts: number;
+}
+
+export interface RejectEvent {
+  id: number;
+  reason: RejectReason;
+  epochId: number;
+  blockNumber: number;
+  tradeSize: number;
+  detail: string;
+  ts: number;
+}
+
+export interface IntelQuote {
+  suggestedAskPerEth: number;
+  asOf: number;
+  rationale: string;
+  source: string;
+  costUsd: number;
+}
+
+export interface Wallet {
+  address: string;
+  eth: number;
+  usdc: number;
+  /** ERC-1155 balance: capacity notional held for the CURRENT epoch only */
+  slot: { epochId: number; capacity: number } | null;
+}
+
+export interface PoolState {
+  pair: string;
+  lambdaBps: number;
+  epochLengthBlocks: number;
+  activeReserveEth: number;
+  activeReserveUsdc: number;
+  passiveReserveEth: number;
+  passiveReserveUsdc: number;
+}
+
+export interface WorldState {
+  blockNumber: number;
+  epochId: number;
+  blocksUntilEpochEnd: number;
+  pool: PoolState;
+  wallet: Wallet;
+  /** fixed primary price, ETH per 1 ETH of slot capacity */
+  slotPricePerEth: number;
+  askPerEth: number;
+  intel: IntelQuote | null;
+  intelCalls: number;
+  graph: GraphEvent[];
+  rejects: RejectEvent[];
+  swaps: { epochId: number; blockNumber: number; sizeEth: number; outUsdc: number; ts: number }[];
+  lastIntelError: string | null;
+}
+
+export const DEFAULT_ASK_PER_ETH = 0.002;
+
+export function slotPrice(state: WorldState): number {
+  return state.intel?.suggestedAskPerEth ?? DEFAULT_ASK_PER_ETH;
+}
+
+export function activePriceUsd(pool: PoolState): number {
+  return pool.activeReserveUsdc / pool.activeReserveEth;
+}
