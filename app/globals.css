@@ -72,4 +72,15 @@ input[type="number"] {
       visibility: hidden;
     }
   }
+
+  /* Enter reveal for receipts, held slots, and new feed rows */
+  .enter {
+    animation: enter 180ms ease-out;
+  }
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
 }

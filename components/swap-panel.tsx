@@ -182,7 +182,7 @@ export function SwapPanel() {
         {result ? (
           <div
             role="status"
-            className={`rounded-md border p-4 ${
+            className={`enter rounded-md border p-4 ${
               result.kind === "filled"
                 ? "border-success/40 bg-success/5"
                 : "border-danger/40 bg-danger/5"

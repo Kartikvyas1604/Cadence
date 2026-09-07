@@ -48,7 +48,7 @@ export function IntelPanel() {
         {s.intel ? (
           <div
             role="status"
-            className="mt-4 rounded-md border border-info/40 bg-info/5 p-4"
+            className="enter mt-4 rounded-md border border-info/40 bg-info/5 p-4"
           >
             <div className="flex items-center gap-2 text-info">
               <CheckCircle2 className="size-4 shrink-0" aria-hidden />

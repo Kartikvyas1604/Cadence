@@ -55,7 +55,7 @@ export function RejectLogPanel() {
           {s.rejects.map((r) => (
             <li
               key={r.id}
-              className="rounded-md border border-border bg-surface-raised/60 p-3"
+              className="enter rounded-md border border-border bg-surface-raised/60 p-3"
             >
               <div className="flex items-center justify-between gap-2">
                 <span

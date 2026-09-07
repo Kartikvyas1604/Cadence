@@ -39,7 +39,7 @@ export function BuyApronPanel() {
     >
       {slot ? (
         <div className="flex flex-1 flex-col">
-          <div className="rounded-md border border-accent/40 bg-accent/5 p-4">
+          <div className="enter rounded-md border border-accent/40 bg-accent/5 p-4">
             <div className="flex items-center gap-2 text-accent-strong">
               <Ticket className="size-4" aria-hidden />
               <p className="font-mono text-xs uppercase tracking-widest">
