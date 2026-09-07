@@ -10,7 +10,7 @@ export function SiteFooter() {
             capacity, not LP equity. No APY is offered or implied.
           </p>
         </div>
-        <div className="space-y-2 font-mono text-xs leading-5 text-muted">
+        <div className="space-y-2 break-words font-mono text-xs leading-5 text-muted">
           <p className="uppercase tracking-widest text-foreground/80">
             Explicitly not
           </p>

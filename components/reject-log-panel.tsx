@@ -49,7 +49,7 @@ export function RejectLogPanel() {
         </div>
       ) : (
         <ol
-          className="flex-1 space-y-2 overflow-y-auto pr-1 lg:max-h-80"
+          className="max-h-80 flex-1 space-y-2 overflow-y-auto pr-1"
           aria-label="Rejected swaps, newest first"
         >
           {s.rejects.map((r) => (

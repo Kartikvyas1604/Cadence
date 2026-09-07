@@ -64,7 +64,7 @@ export function GraphPanel() {
         </div>
       ) : (
         <ol
-          className="flex-1 overflow-y-auto pr-1 lg:max-h-96"
+          className="max-h-96 flex-1 overflow-y-auto pr-1"
           aria-label="Subgraph events, newest first"
         >
           {s.graph.map((e) => (
