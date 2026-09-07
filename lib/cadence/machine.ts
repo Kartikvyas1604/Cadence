@@ -96,7 +96,6 @@ export type Action =
   | { type: "REVEAL_SWAP"; sizeEth: number; salt: string }
   | { type: "SWAP_SUCCEEDED"; sizeEth: number; outUsdc: number; capacityUsed: number }
   | { type: "SWAP_REJECTED"; reason: RejectEvent["reason"]; tradeSize: number; detail: string }
-  | { type: "OTHERS_CONSUME" }
   | { type: "INTEL_QUOTE"; quote: IntelQuote }
   | { type: "INTEL_ERROR"; message: string };
 
@@ -202,11 +201,40 @@ export function reducer(state: WorldState, action: Action): WorldState {
       const block = state.blockNumber + 1;
       const remaining = state.blocksUntilEpochEnd - 1;
       if (remaining > 0) {
+        // Ambient solver flow consumes active depth within the same block —
+        // folded into TICK so the tape appends exactly one point per block.
+        let pool = state.pool;
+        let graph = state.graph;
+        if (Math.random() < 0.3) {
+          const size = 0.4 + Math.random() * 1.8;
+          const out = quoteSwapOutUsdc(pool, size);
+          pool = {
+            ...pool,
+            activeReserveEth: pool.activeReserveEth + size,
+            activeReserveUsdc: pool.activeReserveUsdc - out,
+          };
+          if (Math.random() < 0.35) {
+            graph = [
+              {
+                id: takeEventId(),
+                kind: "consume",
+                epochId: state.epochId,
+                blockNumber: block,
+                size,
+                trader: otherTrader(),
+                ts: Date.now(),
+              },
+              ...graph,
+            ];
+          }
+        }
         return {
           ...state,
           blockNumber: block,
           blocksUntilEpochEnd: remaining,
-          priceHistory: appendPrice(state.pool, state.priceHistory, block, state.epochId),
+          pool,
+          priceHistory: appendPrice(pool, state.priceHistory, block, state.epochId),
+          graph,
         };
       }
       // Epoch refresh: expire prior seats, refresh active = λ × total, new epochId
@@ -362,37 +390,6 @@ export function reducer(state: WorldState, action: Action): WorldState {
 
     case "SWAP_REJECTED": {
       return addReject(state, action.reason, action.tradeSize, action.detail);
-    }
-
-    case "OTHERS_CONSUME": {
-      // Ambient solver flow consumes active capacity, shrinking it over the epoch
-      const size = 0.4 + Math.random() * 1.8;
-      const out = quoteSwapOutUsdc(state.pool, size);
-      const pool = {
-        ...state.pool,
-        activeReserveEth: state.pool.activeReserveEth + size,
-        activeReserveUsdc: state.pool.activeReserveUsdc - out,
-      };
-      return {
-        ...state,
-        pool,
-        priceHistory: appendPrice(pool, state.priceHistory, state.blockNumber, state.epochId),
-        graph:
-          Math.random() < 0.35
-            ? [
-                {
-                  id: takeEventId(),
-                  kind: "consume",
-                  epochId: state.epochId,
-                  blockNumber: state.blockNumber,
-                  size,
-                  trader: otherTrader(),
-                  ts: Date.now(),
-                },
-                ...state.graph,
-              ]
-            : state.graph,
-      };
     }
 
     case "INTEL_QUOTE": {

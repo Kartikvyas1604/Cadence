@@ -45,8 +45,6 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const t = setInterval(() => {
       startTransition(() => dispatch({ type: "TICK" }));
-      // ambient solver flow eats active depth during the epoch
-      if (Math.random() < 0.3) dispatch({ type: "OTHERS_CONSUME" });
     }, BLOCK_INTERVAL_MS);
     return () => clearInterval(t);
   }, []);
