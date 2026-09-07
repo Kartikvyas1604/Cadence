@@ -80,6 +80,14 @@ export interface PoolState {
   passiveReserveUsdc: number;
 }
 
+export interface PricePoint {
+  block: number;
+  epochId: number;
+  activeUsd: number;
+  passiveUsd: number;
+  swap?: { sizeEth: number; outUsdc: number };
+}
+
 export interface WorldState {
   blockNumber: number;
   epochId: number;
@@ -94,6 +102,7 @@ export interface WorldState {
   graph: GraphEvent[];
   rejects: RejectEvent[];
   swaps: { epochId: number; blockNumber: number; sizeEth: number; outUsdc: number; ts: number }[];
+  priceHistory: PricePoint[];
   lastIntelError: string | null;
 }
 

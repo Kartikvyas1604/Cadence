@@ -1,4 +1,4 @@
-import type { GraphEvent, IntelQuote, RejectEvent, WorldState } from "./types";
+import type { GraphEvent, IntelQuote, PricePoint, RejectEvent, WorldState } from "./types";
 import { DEFAULT_ASK_PER_ETH } from "./types";
 
 export const LAMBDA_BPS = 2500;
@@ -6,6 +6,8 @@ export const EPOCH_LENGTH_BLOCKS = 12;
 export const BLOCK_INTERVAL_MS = 1800;
 export const ETH_START = 8;
 export const USDC_START = 25_000;
+
+const MAX_PRICE_POINTS = 180;
 
 const TRADERS = [
   "0x3fA9…c21B",
@@ -23,6 +25,25 @@ export function takeEventId(): number {
 
 export function otherTrader(): string {
   return TRADERS[Math.floor(Math.random() * TRADERS.length)];
+}
+
+function appendPrice(
+  pool: WorldState["pool"],
+  priceHistory: PricePoint[],
+  block: number,
+  epochId: number,
+  swap?: { sizeEth: number; outUsdc: number },
+): PricePoint[] {
+  return [
+    ...priceHistory,
+    {
+      block,
+      epochId,
+      activeUsd: pool.activeReserveUsdc / pool.activeReserveEth,
+      passiveUsd: pool.passiveReserveUsdc / pool.passiveReserveEth,
+      swap,
+    },
+  ].slice(-MAX_PRICE_POINTS);
 }
 
 export function createWorld(): WorldState {
@@ -54,6 +75,7 @@ export function createWorld(): WorldState {
     graph: [],
     rejects: [],
     swaps: [],
+    priceHistory: [],
     lastIntelError: null,
   };
 }
@@ -84,7 +106,12 @@ export function reducer(state: WorldState, action: Action): WorldState {
       const block = state.blockNumber + 1;
       const remaining = state.blocksUntilEpochEnd - 1;
       if (remaining > 0) {
-        return { ...state, blockNumber: block, blocksUntilEpochEnd: remaining };
+        return {
+          ...state,
+          blockNumber: block,
+          blocksUntilEpochEnd: remaining,
+          priceHistory: appendPrice(state.pool, state.priceHistory, block, state.epochId),
+        };
       }
       // Epoch refresh: expire prior seats, refresh active = λ × total, new epochId
       const totalEth = state.pool.activeReserveEth + state.pool.passiveReserveEth;
@@ -104,6 +131,13 @@ export function reducer(state: WorldState, action: Action): WorldState {
             ...state.graph,
           ]
         : state.graph;
+      const pool = {
+        ...state.pool,
+        activeReserveEth: totalEth * activeShare,
+        activeReserveUsdc: totalUsdc * activeShare,
+        passiveReserveEth: totalEth * (1 - activeShare),
+        passiveReserveUsdc: totalUsdc * (1 - activeShare),
+      };
       return {
         ...state,
         blockNumber: block,
@@ -111,13 +145,8 @@ export function reducer(state: WorldState, action: Action): WorldState {
         blocksUntilEpochEnd: state.pool.epochLengthBlocks,
         wallet: { ...state.wallet, slot: null },
         graph,
-        pool: {
-          ...state.pool,
-          activeReserveEth: totalEth * activeShare,
-          activeReserveUsdc: totalUsdc * activeShare,
-          passiveReserveEth: totalEth * (1 - activeShare),
-          passiveReserveUsdc: totalUsdc * (1 - activeShare),
-        },
+        pool,
+        priceHistory: appendPrice(pool, state.priceHistory, block, state.epochId + 1),
       };
     }
 
@@ -150,6 +179,13 @@ export function reducer(state: WorldState, action: Action): WorldState {
       const k = state.pool.activeReserveEth * state.pool.activeReserveUsdc;
       const newEth = state.pool.activeReserveEth + action.sizeEth;
       const newUsdc = k / newEth;
+      const pool = {
+        ...state.pool,
+        activeReserveEth: newEth,
+        activeReserveUsdc: newUsdc,
+        passiveReserveEth: state.pool.passiveReserveEth,
+        passiveReserveUsdc: state.pool.passiveReserveUsdc,
+      };
       return {
         ...state,
         wallet: {
@@ -160,13 +196,7 @@ export function reducer(state: WorldState, action: Action): WorldState {
             capacity: Math.max(0, state.wallet.slot!.capacity - action.capacityUsed),
           },
         },
-        pool: {
-          ...state.pool,
-          activeReserveEth: newEth,
-          activeReserveUsdc: newUsdc,
-          passiveReserveEth: state.pool.passiveReserveEth,
-          passiveReserveUsdc: state.pool.passiveReserveUsdc,
-        },
+        pool,
         swaps: [
           {
             epochId: state.epochId,
@@ -177,6 +207,13 @@ export function reducer(state: WorldState, action: Action): WorldState {
           },
           ...state.swaps,
         ],
+        priceHistory: appendPrice(
+          pool,
+          state.priceHistory,
+          state.blockNumber,
+          state.epochId,
+          { sizeEth: action.sizeEth, outUsdc: action.outUsdc },
+        ),
         graph: [
           {
             id: takeEventId(),
@@ -214,13 +251,15 @@ export function reducer(state: WorldState, action: Action): WorldState {
       // Ambient solver flow consumes active capacity, shrinking it over the epoch
       const size = 0.4 + Math.random() * 1.8;
       const out = quoteSwapOutUsdc(state.pool, size);
+      const pool = {
+        ...state.pool,
+        activeReserveEth: state.pool.activeReserveEth + size,
+        activeReserveUsdc: state.pool.activeReserveUsdc - out,
+      };
       return {
         ...state,
-        pool: {
-          ...state.pool,
-          activeReserveEth: state.pool.activeReserveEth + size,
-          activeReserveUsdc: state.pool.activeReserveUsdc - out,
-        },
+        pool,
+        priceHistory: appendPrice(pool, state.priceHistory, state.blockNumber, state.epochId),
         graph:
           Math.random() < 0.35
             ? [

@@ -7,6 +7,7 @@ import { SwapPanel } from "./swap-panel";
 import { RejectLogPanel } from "./reject-log-panel";
 import { GraphPanel } from "./graph-panel";
 import { IntelPanel } from "./intel-panel";
+import { PriceChart } from "./price-chart";
 
 const FACTS = [
   ["Invariant", "Passive reserves cannot unlock via same-block order splitting."],
@@ -15,11 +16,11 @@ const FACTS = [
   ["Depth is capped", "Fills quote active reserves only — never passive."],
 ];
 
-function FactsCard() {
+function FactsCard({ className = "" }: { className?: string }) {
   return (
     <section
       aria-label="Protocol facts"
-      className="flex flex-col justify-between rounded-lg border border-border bg-surface p-5 lg:col-span-2"
+      className={`flex flex-col justify-between rounded-lg border border-border bg-surface p-5 ${className}`}
     >
       <div className="grid gap-6 sm:grid-cols-2">
         {FACTS.map(([title, body]) => (
@@ -64,9 +65,10 @@ export function ConsoleView() {
           <BuyCadencePanel className="lg:col-span-1" />
           <SwapPanel className="lg:col-span-2" />
           <RejectLogPanel className="lg:col-span-1" />
-          <GraphPanel className="lg:col-span-2" />
+          <PriceChart className="lg:col-span-2" />
           <IntelPanel className="lg:col-span-1" />
-          <FactsCard />
+          <GraphPanel className="lg:col-span-2" />
+          <FactsCard className="lg:col-span-3" />
         </div>
       </div>
     </main>
