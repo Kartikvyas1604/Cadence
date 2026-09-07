@@ -28,47 +28,80 @@ export function PriceChart({ className = "" }: { className?: string }) {
   const newest = all[all.length - 1];
   const live = offset === 0;
 
-  // butter tween: newest segment eases from the previous price to the new one
-  const [p, setP] = useState(1);
+  // ——— butter tween ———
+  // A single mount-scoped rAF loop owns the animation. It only calls
+  // setState while a tween is in flight, reads the latest data through a
+  // ref, and is never restarted by unrelated renders — so unrelated
+  // provider updates can't stutter or cancel it.
+  const dataRef = useRef(all);
+  useEffect(() => {
+    dataRef.current = all;
+  }, [all]);
+
+  const [tween, setTween] = useState<{ len: number; p: number }>({
+    len: -1,
+    p: 1,
+  });
 
   useEffect(() => {
-    const n = newest;
-    const prev = all[all.length - 2];
-    if (!n || !prev) return;
-    const from = prev.activeUsd;
-    const to = n.activeUsd;
-    if (
-      from === to ||
-      typeof window === "undefined" ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
-    let raf = requestAnimationFrame((t0) => {
-      const step = (now: number) => {
-        const prog = Math.min(1, (now - t0) / TWEEN_MS);
-        setP(prog);
-        if (prog < 1) raf = requestAnimationFrame(step);
-      };
-      raf = requestAnimationFrame(step);
-    });
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let raf = 0;
+    let lastLen = -1;
+    let animating = false;
+    let tweenStart = 0;
+    const loop = (now: number) => {
+      const cur = dataRef.current;
+      if (cur.length !== lastLen) {
+        const n = cur[cur.length - 1];
+        const prev = cur[cur.length - 2];
+        const changed = !!(n && prev && prev.activeUsd !== n.activeUsd);
+        lastLen = cur.length;
+        if (reduced) {
+          animating = false;
+          setTween({ len: cur.length, p: 1 });
+        } else {
+          animating = changed;
+          tweenStart = now;
+          setTween({ len: cur.length, p: changed ? 0.0001 : 1 });
+        }
+      }
+      if (animating) {
+        const prog = Math.min(1, (now - tweenStart) / TWEEN_MS);
+        setTween({ len: lastLen, p: prog });
+        if (prog >= 1) animating = false;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [all, newest]);
+  }, []);
 
-  const eased = 1 - Math.pow(1 - p, 3);
+  // eased progress for the newest segment; `len` guards against a stale
+  // tween leaking into freshly appended data
+  const fromV =
+    all.length >= 2 ? all[all.length - 2].activeUsd : (newest?.activeUsd ?? 0);
+  const toV = newest?.activeUsd ?? 0;
+  const moving = !!newest && fromV !== toV;
+  const easedRaw = tween.p < 1 ? 1 - Math.pow(1 - tween.p, 3) : 1;
+  const easedUsed = !moving
+    ? 1
+    : tween.len === all.length
+      ? easedRaw
+      : tween.p < 1
+        ? easedRaw
+        : 0;
 
   // rendered points: only the live newest point is interpolated
   const displayPoints = (() => {
-    if (!points.length || !live || !newest || eased >= 1) return points;
+    if (!points.length || !live || !newest) return points;
     const lastVisible = points[points.length - 1];
     if (lastVisible.block !== newest.block) return points;
-    const from = all.length >= 2 ? all[all.length - 2].activeUsd : newest.activeUsd;
-    const to = newest.activeUsd;
-    if (from === to) return points;
     const pts = points.slice();
     pts[pts.length - 1] = {
       ...lastVisible,
-      activeUsd: from + (to - from) * eased,
+      activeUsd: fromV + (toV - fromV) * easedUsed,
     };
     return pts;
   })();
@@ -92,8 +125,14 @@ export function PriceChart({ className = "" }: { className?: string }) {
   const plotW = plotR - plotL;
   const base = H - PAD.bottom;
 
-  const x = (i: number) =>
-    plotL + (i / Math.max(1, points.length - 1)) * plotW;
+  // ——— smooth scroll ———
+  // While the newest point tweens in, the whole tape slides left by one
+  // slot (phase -1 → 0) so appends glide instead of teleporting.
+  const headMatchesLive =
+    live && !!newest && points[points.length - 1]?.block === newest.block;
+  const phase = headMatchesLive ? easedUsed - 1 : 0;
+  const step = plotW / Math.max(1, span - 1);
+  const x = (i: number) => plotL + (i + phase) * step;
   const y = (v: number) =>
     PAD.top + (1 - (v - min) / (max - min)) * (base - PAD.top);
 
@@ -220,9 +259,7 @@ export function PriceChart({ className = "" }: { className?: string }) {
                 return;
               }
               setSpan(Math.max(MIN_SPAN, i1 - i0 + 1));
-              setOffset(
-                Math.max(0, all.length - (start + i1 + 1)),
-              );
+              setOffset(Math.max(0, all.length - (start + i1 + 1)));
             }}
             onPointerCancel={() => {
               draggingRef.current = false;
