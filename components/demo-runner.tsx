@@ -2,18 +2,18 @@
 
 import { useCallback, useState } from "react";
 import { Play, Square } from "lucide-react";
-import { useApronActions } from "@/lib/apron/provider";
+import { useCadenceActions } from "@/lib/cadence/provider";
 
 const STEPS = [
-  "Minting a 2 Ξ apron slot for this epoch…",
-  "Swapping 2 Ξ with the slot — expect a fill…",
+  "Minting a 2 ETH cadence slot for this epoch…",
+  "Swapping 2 ETH with the slot — expect a fill…",
   "Swapping again without a slot — expect a revert…",
   "Swapping oversize — expect a revert…",
   "Paying $0.05 on Hedera for the capacity ask…",
 ] as const;
 
 export function DemoRunner() {
-  const { buySlot, attemptSwap, refreshIntel } = useApronActions();
+  const { buySlot, attemptSwap, refreshIntel } = useCadenceActions();
   const [running, setRunning] = useState(false);
   const [step, setStep] = useState(-1);
 

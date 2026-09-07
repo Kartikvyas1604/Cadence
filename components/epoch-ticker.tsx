@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useApron } from "@/lib/apron/provider";
-import { fmtBlock, fmtEth, fmtPricePerEth, fmtUsdc } from "@/lib/apron/format";
-import { activePriceUsd } from "@/lib/apron/types";
+import { useCadence } from "@/lib/cadence/provider";
+import { fmtBlock, fmtEth, fmtPricePerEth, fmtUsdc } from "@/lib/cadence/format";
+import { activePriceUsd } from "@/lib/cadence/types";
+import { EthIcon } from "./eth-icon";
 
 export function EpochTicker() {
-  const s = useApron();
+  const s = useCadence();
   const pathname = usePathname();
   if (pathname === "/console") return null;
 
@@ -36,12 +37,12 @@ export function EpochTicker() {
         <span className="hidden tabular-nums text-muted sm:inline">
           slot ask{" "}
           <span className="text-accent-strong">
-            {fmtPricePerEth(s.slotPricePerEth)} Ξ
+            {fmtPricePerEth(s.slotPricePerEth)} <EthIcon />
           </span>
         </span>
         <span className="hidden tabular-nums text-muted md:inline">
-          depth {fmtEth(s.pool.activeReserveEth, 1)} Ξ active ·{" "}
-          {fmtEth(s.pool.passiveReserveEth, 0)} Ξ locked
+          depth {fmtEth(s.pool.activeReserveEth, 1)} <EthIcon /> active ·{" "}
+          {fmtEth(s.pool.passiveReserveEth, 0)} <EthIcon /> locked
         </span>
         <Link
           href="/console"

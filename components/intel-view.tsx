@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { IntelPanel } from "./intel-panel";
-import { useApron } from "@/lib/apron/provider";
-import { fmtPricePerEth } from "@/lib/apron/format";
+import { EthIcon } from "./eth-icon";
+import { useCadence } from "@/lib/cadence/provider";
+import { fmtPricePerEth } from "@/lib/cadence/format";
 
 const FLOW = [
   {
@@ -15,17 +16,17 @@ const FLOW = [
   {
     n: "02",
     title: "Node computes scarcity",
-    body: "Active utilization and a toxicity proxy from observed rejects feed a suggested ask per 1 Ξ of capacity.",
+    body: "Active utilization and a toxicity proxy from observed rejects feed a suggested ask per 1 ETH of capacity.",
   },
   {
     n: "03",
     title: "Quote writes the ask",
-    body: "The signed quote lands in the buy panel. The next apron slot mints at the intel price, not the default.",
+    body: "The signed quote lands in the buy panel. The next cadence slot mints at the intel price, not the default.",
   },
 ] as const;
 
 export function IntelView() {
-  const s = useApron();
+  const s = useCadence();
   return (
     <main className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-12 md:px-6 lg:px-8">
@@ -39,7 +40,7 @@ export function IntelView() {
         <p className="mt-4 max-w-prose text-sm leading-7 text-muted md:text-base md:leading-8">
           Capacity pricing shouldn&apos;t be a hardcoded constant. One paid
           Hedera x402 call returns a capacity/toxicity quote that sets the
-          apron-slot ask — real payment, real intel, visible in the UI.
+          cadence-slot ask — real payment, real intel, visible in the UI.
         </p>
 
         <ol className="mt-10 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
@@ -65,7 +66,7 @@ export function IntelView() {
             </h2>
             <dl className="mt-4 space-y-3 font-mono text-sm">
               {[
-                ["suggestedAskPerEth", "Ξ per 1 Ξ of slot capacity"],
+                ["suggestedAskPerEth", "ETH per 1 ETH of slot capacity"],
                 ["asOf", "timestamp of the quote"],
                 ["rationale", "utilization + toxicity, in words"],
                 ["source", "hedera:x402 · blocky402 intel node"],
@@ -83,7 +84,7 @@ export function IntelView() {
             <p className="mt-5 border-t border-border pt-4 text-xs leading-5 text-muted">
               Current ask on this session:{" "}
               <span className="font-mono tabular-nums text-accent-strong">
-                {fmtPricePerEth(s.slotPricePerEth)} Ξ
+                {fmtPricePerEth(s.slotPricePerEth)} <EthIcon />
               </span>{" "}
               ·{" "}
               <Link

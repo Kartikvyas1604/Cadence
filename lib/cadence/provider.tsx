@@ -30,7 +30,7 @@ const ActionsContext = createContext<{
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function ApronProvider({ children }: { children: React.ReactNode }) {
+export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, createWorld);
   const [, startTransition] = useTransition();
   const stateRef = useRef(state);
@@ -137,14 +137,14 @@ export function ApronProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useApron(): WorldState {
+export function useCadence(): WorldState {
   const ctx = useContext(IntelContext);
-  if (!ctx) throw new Error("useApron must be used within ApronProvider");
+  if (!ctx) throw new Error("useCadence must be used within CadenceProvider");
   return ctx;
 }
 
-export function useApronActions() {
+export function useCadenceActions() {
   const ctx = useContext(ActionsContext);
-  if (!ctx) throw new Error("useApronActions must be used within ApronProvider");
+  if (!ctx) throw new Error("useCadenceActions must be used within CadenceProvider");
   return ctx;
 }

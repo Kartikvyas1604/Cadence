@@ -2,9 +2,10 @@
 
 import { Activity } from "lucide-react";
 import { Panel } from "./panel";
-import { useApron } from "@/lib/apron/provider";
-import { fmtBlock, fmtEth, fmtPricePerEth, timeAgo } from "@/lib/apron/format";
-import type { GraphEventKind } from "@/lib/apron/types";
+import { EthIcon } from "./eth-icon";
+import { useCadence } from "@/lib/cadence/provider";
+import { fmtBlock, fmtEth, fmtPricePerEth, timeAgo } from "@/lib/cadence/format";
+import type { GraphEventKind } from "@/lib/cadence/types";
 
 const KIND_STYLE: Record<GraphEventKind, { label: string; cls: string }> = {
   mint: { label: "mint", cls: "border-accent/50 text-accent-strong" },
@@ -13,7 +14,7 @@ const KIND_STYLE: Record<GraphEventKind, { label: string; cls: string }> = {
 };
 
 export function GraphPanel({ className = "" }: { className?: string }) {
-  const s = useApron();
+  const s = useCadence();
 
   const totals = s.graph.reduce(
     (acc, e) => {
@@ -31,7 +32,7 @@ export function GraphPanel({ className = "" }: { className?: string }) {
       id="graph"
       step="4 · index"
       title="Graph panel"
-      caption="Live Studio subgraph — apron slot mint / burn / consume, indexed per epoch."
+      caption="Live Studio subgraph — cadence slot mint / burn / consume, indexed per epoch."
     >
       <dl className="mb-4 grid grid-cols-3 gap-px overflow-hidden rounded-md border border-border bg-border font-mono text-sm">
         {(
@@ -46,7 +47,7 @@ export function GraphPanel({ className = "" }: { className?: string }) {
               {label}
             </dt>
             <dd className={`mt-0.5 tabular-nums ${cls}`}>
-              {fmtEth(value, 2)} Ξ
+              {fmtEth(value, 2)} <EthIcon />
             </dd>
           </div>
         ))}
@@ -59,7 +60,7 @@ export function GraphPanel({ className = "" }: { className?: string }) {
             Nothing indexed yet
           </p>
           <p className="max-w-[30ch] text-xs leading-5 text-muted">
-            Mint an apron slot and it appears here the moment the block lands.
+            Mint a cadence slot and it appears here the moment the block lands.
           </p>
         </div>
       ) : (
@@ -83,11 +84,11 @@ export function GraphPanel({ className = "" }: { className?: string }) {
                 </span>
               </div>
               <div className="shrink-0 text-right font-mono text-xs tabular-nums">
-                <span className="text-foreground">{fmtEth(e.size)} Ξ</span>
+                <span className="text-foreground">{fmtEth(e.size)} <EthIcon /></span>
                 <span className="ml-2 text-muted">{timeAgo(e.ts)}</span>
                 {e.kind === "mint" && e.pricePaid ? (
                   <span className="ml-2 text-accent">
-                    @ {fmtPricePerEth(e.pricePaid / e.size)} Ξ
+                    @ {fmtPricePerEth(e.pricePaid / e.size)} <EthIcon />
                   </span>
                 ) : null}
               </div>

@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, XCircle } from "lucide-react";
+import { EthIcon } from "./eth-icon";
 import { Panel } from "./panel";
-import { useApron, useApronActions } from "@/lib/apron/provider";
-import { quoteSwapOutUsdc } from "@/lib/apron/machine";
-import { fmtEth, fmtUsdc } from "@/lib/apron/format";
-import { activePriceUsd } from "@/lib/apron/types";
-import type { RejectReason } from "@/lib/apron/types";
+import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
+import { quoteSwapOutUsdc } from "@/lib/cadence/machine";
+import { fmtEth, fmtUsdc } from "@/lib/cadence/format";
+import { activePriceUsd } from "@/lib/cadence/types";
+import type { RejectReason } from "@/lib/cadence/types";
 
 const DEMO_TOGGLES = [
-  { key: "withoutSlot", label: "without slot", hint: "no apron slot held" },
+  { key: "withoutSlot", label: "without slot", hint: "no cadence slot held" },
   { key: "oversize", label: "oversize", hint: "size > slot capacity" },
   { key: "reachPassive", label: "reach passive", hint: "same-block split" },
 ] as const;
@@ -18,8 +19,8 @@ const DEMO_TOGGLES = [
 type ToggleKey = (typeof DEMO_TOGGLES)[number]["key"];
 
 export function SwapPanel({ className = "" }: { className?: string }) {
-  const s = useApron();
-  const { attemptSwap } = useApronActions();
+  const s = useCadence();
+  const { attemptSwap } = useCadenceActions();
   const [size, setSize] = useState("2");
   const [toggles, setToggles] = useState<Record<ToggleKey, boolean>>({
     withoutSlot: false,
@@ -110,7 +111,7 @@ export function SwapPanel({ className = "" }: { className?: string }) {
               placeholder="0.0"
             />
             <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sm text-muted">
-              Ξ
+              <EthIcon />
             </span>
           </div>
         </div>
@@ -138,7 +139,13 @@ export function SwapPanel({ className = "" }: { className?: string }) {
           <div className="flex items-baseline justify-between border-t border-border pt-1.5">
             <dt className="text-muted">slot capacity</dt>
             <dd className="tabular-nums text-foreground">
-              {slot ? `${fmtEth(slot.capacity, 2)} Ξ` : "none held"}
+              {slot ? (
+                <>
+                  {fmtEth(slot.capacity, 2)} <EthIcon />
+                </>
+              ) : (
+                "none held"
+              )}
             </dd>
           </div>
         </dl>
@@ -197,7 +204,7 @@ export function SwapPanel({ className = "" }: { className?: string }) {
                 <div className="text-sm leading-6">
                   <p className="font-medium text-success">Filled</p>
                   <p className="font-mono text-xs tabular-nums text-muted">
-                    swapped {fmtEth(result.sizeEth)} Ξ →{" "}
+                    swapped {fmtEth(result.sizeEth)} <EthIcon /> →{" "}
                     {fmtUsdc(result.outUsdc)} USDC · slot notional burned ·
                     epoch #{s.epochId}
                   </p>
@@ -237,7 +244,7 @@ export function SwapPanel({ className = "" }: { className?: string }) {
             "Simulating…"
           ) : willFill ? (
             <>
-              Swap {sizeNum > 0 ? fmtEth(sizeNum) : ""} Ξ
+              Swap {sizeNum > 0 ? fmtEth(sizeNum) : ""} <EthIcon />
               <ArrowRight className="size-4" aria-hidden />
             </>
           ) : (

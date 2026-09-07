@@ -8,12 +8,13 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Panel } from "./panel";
-import { useApron, useApronActions } from "@/lib/apron/provider";
-import { fmtPricePerEth, timeAgo } from "@/lib/apron/format";
+import { EthIcon } from "./eth-icon";
+import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
+import { fmtPricePerEth, timeAgo } from "@/lib/cadence/format";
 
 export function IntelPanel({ className = "" }: { className?: string }) {
-  const s = useApron();
-  const { refreshIntel } = useApronActions();
+  const s = useCadence();
+  const { refreshIntel } = useCadenceActions();
   const [pending, setPending] = useState(false);
 
   async function handleFetch() {
@@ -32,7 +33,7 @@ export function IntelPanel({ className = "" }: { className?: string }) {
       id="intel"
       step="5 · intel"
       title="Pay for the ask"
-      caption="Hedera x402 paid capacity/toxicity intel writes the apron-slot ask. One call, real payment."
+      caption="Hedera x402 paid capacity/toxicity intel writes the cadence-slot ask. One call, real payment."
     >
       <div className="flex flex-1 flex-col">
         <div className="rounded-md border border-border bg-surface-raised/50 p-4">
@@ -41,7 +42,9 @@ export function IntelPanel({ className = "" }: { className?: string }) {
           </p>
           <p className="mt-1 font-mono text-2xl font-medium tabular-nums text-accent-strong">
             {fmtPricePerEth(s.slotPricePerEth)}{" "}
-            <span className="text-sm text-muted">Ξ / 1 Ξ capacity</span>
+            <span className="text-sm text-muted">
+              <EthIcon /> / 1 <EthIcon /> capacity
+            </span>
           </p>
           <p className="mt-1 font-mono text-[11px] text-muted">
             {s.intel

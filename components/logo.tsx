@@ -1,6 +1,6 @@
-export function ApronMark({
+export function CadenceMark({
   size = 32,
-  gradientId = "apron-g",
+  gradientId = "cadence-g",
 }: {
   size?: number;
   gradientId?: string;
@@ -12,10 +12,10 @@ export function ApronMark({
       viewBox="0 0 64 64"
       fill="none"
       role="img"
-      aria-label="Apron logo"
+      aria-label="Cadence logo"
     >
       <defs>
-        <linearGradient id={gradientId} x1="32" y1="6" x2="32" y2="54" gradientUnits="userSpaceOnUse">
+        <linearGradient id={gradientId} x1="32" y1="13" x2="32" y2="51" gradientUnits="userSpaceOnUse">
           <stop stopColor="#FFCB57" />
           <stop offset="1" stopColor="#E89B2C" />
         </linearGradient>
@@ -30,34 +30,26 @@ export function ApronMark({
         stroke="#3A3324"
         strokeWidth="1.5"
       />
-      <path
-        d="M26 12 Q32 4 38 12 L38 30 L46 34 L46 48 Q46 53 41 53 L23 53 Q18 53 18 48 L18 34 L26 30 Z"
-        fill={`url(#${gradientId})`}
-      />
-      {/* the slot — negative space across the bib */}
-      <rect x="28.5" y="18" width="7" height="3" rx="1.5" fill="#14120D" />
-      {/* stitched pocket */}
-      <path
-        d="M22 41 H42"
-        stroke="#B97F1F"
-        strokeWidth="1.5"
-        strokeDasharray="3 2.5"
-        strokeLinecap="round"
-      />
+      {/* rhythm bars — the epoch peak in the middle, ticking off toward the edges */}
+      <rect x="10.5" y="24" width="5" height="16" rx="2.5" fill={`url(#${gradientId})`} opacity="0.5" />
+      <rect x="20" y="18" width="5" height="28" rx="2.5" fill={`url(#${gradientId})`} />
+      <rect x="29.5" y="13" width="5" height="38" rx="2.5" fill={`url(#${gradientId})`} />
+      <rect x="39" y="20" width="5" height="24" rx="2.5" fill={`url(#${gradientId})`} />
+      <rect x="48.5" y="26" width="5" height="12" rx="2.5" fill={`url(#${gradientId})`} opacity="0.5" />
     </svg>
   );
 }
 
-export function ApronLogo({ compact = false }: { compact?: boolean }) {
+export function CadenceLogo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      <ApronMark size={compact ? 26 : 30} />
+      <CadenceMark size={compact ? 26 : 30} />
       <span
         className={`font-serif leading-none tracking-tight text-foreground ${
           compact ? "text-xl" : "text-2xl"
         }`}
       >
-        Apron
+        Cadence
       </span>
     </span>
   );

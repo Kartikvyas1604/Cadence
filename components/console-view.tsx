@@ -2,7 +2,7 @@
 
 import { EpochBar } from "./epoch-bar";
 import { DemoRunner } from "./demo-runner";
-import { BuyApronPanel } from "./buy-apron-panel";
+import { BuyCadencePanel } from "./buy-cadence-panel";
 import { SwapPanel } from "./swap-panel";
 import { RejectLogPanel } from "./reject-log-panel";
 import { GraphPanel } from "./graph-panel";
@@ -10,7 +10,7 @@ import { IntelPanel } from "./intel-panel";
 
 const FACTS = [
   ["Invariant", "Passive reserves cannot unlock via same-block order splitting."],
-  ["Slot honesty", "Unused apron slots expire worthless at epoch refresh."],
+  ["Slot honesty", "Unused cadence slots expire worthless at epoch refresh."],
   ["Seat ≠ equity", "A slot is capacity, not a share of reserves."],
   ["Depth is capped", "Fills quote active reserves only — never passive."],
 ];
@@ -61,7 +61,7 @@ export function ConsoleView() {
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">
-          <BuyApronPanel className="lg:col-span-1" />
+          <BuyCadencePanel className="lg:col-span-1" />
           <SwapPanel className="lg:col-span-2" />
           <RejectLogPanel className="lg:col-span-1" />
           <GraphPanel className="lg:col-span-2" />

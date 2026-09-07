@@ -12,14 +12,14 @@ export interface RejectReasonMeta {
 export const REJECT_REASONS: Record<RejectReason, RejectReasonMeta> = {
   "no-slot": {
     code: "no-slot",
-    title: "No apron slot",
-    detail: "beforeSwap reverted: trader holds no apron slot for this epoch.",
+    title: "No cadence slot",
+    detail: "beforeSwap reverted: trader holds no cadence slot for this epoch.",
   },
   oversize: {
     code: "oversize",
     title: "Oversize vs slot",
     detail:
-      "beforeSwap reverted: trade size exceeds apron slot capacity for this epoch.",
+      "beforeSwap reverted: trade size exceeds cadence slot capacity for this epoch.",
   },
   "same-block-passive-unlock": {
     code: "same-block-passive-unlock",

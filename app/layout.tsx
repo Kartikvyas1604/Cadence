@@ -3,7 +3,7 @@ import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { EpochTicker } from "@/components/epoch-ticker";
-import { ApronProvider } from "@/lib/apron/provider";
+import { CadenceProvider } from "@/lib/cadence/provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,9 +23,9 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Apron — Scarce epoch execution capacity",
+  title: "Cadence — Scarce epoch execution capacity",
   description:
-    "Buy an apron slot for this epoch. Swap against active reserves only. No slot, no fill. ERC-1155 capacity tickets on a Uniswap v4 hook.",
+    "Buy a cadence slot for this epoch. Swap against active reserves only. No slot, no fill. ERC-1155 capacity tickets on a Uniswap v4 hook.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -35,11 +35,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full motion-safe:scroll-smooth antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background font-sans text-foreground">
-        <ApronProvider>
+        <CadenceProvider>
           <SiteHeader />
           <EpochTicker />
           {children}
-        </ApronProvider>
+        </CadenceProvider>
       </body>
     </html>
   );

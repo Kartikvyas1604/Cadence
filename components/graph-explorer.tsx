@@ -3,17 +3,18 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { GraphPanel } from "./graph-panel";
-import { useApron } from "@/lib/apron/provider";
-import { fmtEth } from "@/lib/apron/format";
+import { EthIcon } from "./eth-icon";
+import { useCadence } from "@/lib/cadence/provider";
+import { fmtEth } from "@/lib/cadence/format";
 
 const ENTITIES = [
-  ["ApronMint", "buyer, epochId, size, pricePaid, ts"],
-  ["ApronConsume", "trader, epochId, sizeBurned, swapTx, ts"],
-  ["ApronBurn", "epochId, size (expired un-consumed capacity)"],
+  ["CadenceMint", "buyer, epochId, size, pricePaid, ts"],
+  ["CadenceConsume", "trader, epochId, sizeBurned, swapTx, ts"],
+  ["CadenceBurn", "epochId, size (expired un-consumed capacity)"],
 ] as const;
 
 export function GraphExplorer() {
-  const s = useApron();
+  const s = useCadence();
   const totals = s.graph.reduce(
     (acc, e) => {
       if (e.kind === "mint") acc.minted += e.size;
@@ -52,7 +53,7 @@ export function GraphExplorer() {
                 {label}
               </dt>
               <dd className={`mt-1 text-2xl tabular-nums ${cls}`}>
-                {fmtEth(value, 2)} Ξ
+                {fmtEth(value, 2)} <EthIcon />
               </dd>
             </div>
           ))}

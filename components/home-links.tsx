@@ -24,7 +24,7 @@ const PAGES = [
     href: "/intel",
     icon: RadioTower,
     title: "Intel",
-    body: "One paid x402 call on Hedera writes the apron-slot ask. Pay per quote.",
+    body: "One paid x402 call on Hedera writes the cadence-slot ask. Pay per quote.",
   },
 ] as const;
 

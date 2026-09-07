@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 const steps = [
   {
     n: "01",
-    title: "Buy an apron slot",
+    title: "Buy a cadence slot",
     body: "Mint an ERC-1155 capacity ticket for the current epoch at a fixed primary price.",
   },
   {
@@ -31,10 +31,10 @@ export function Hero() {
           Uniswap v4 hook · ERC-1155 · one pair, one λ
         </p>
         <h1 className="max-w-3xl font-serif text-5xl leading-[1.05] tracking-tight text-foreground md:text-7xl">
-          Buy an apron slot for <em className="italic text-accent-strong">this epoch.</em>
+          Buy a cadence slot for <em className="italic text-accent-strong">this epoch.</em>
         </h1>
         <p className="mt-6 max-w-xl text-base leading-7 text-muted md:text-lg md:leading-8">
-          Apron tokenizes scarce per-epoch execution capacity. Solvers and size
+          Cadence tokenizes scarce per-epoch execution capacity. Solvers and size
           traders buy gate slots; the hook fills them against active reserves
           only. Everyone else reverts.
         </p>

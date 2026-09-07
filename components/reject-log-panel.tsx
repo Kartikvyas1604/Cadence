@@ -2,10 +2,11 @@
 
 import { ShieldBan } from "lucide-react";
 import { Panel } from "./panel";
-import { useApron } from "@/lib/apron/provider";
-import { fmtBlock, fmtEth, timeAgo } from "@/lib/apron/format";
-import { REJECT_REASONS } from "@/lib/apron/types";
-import type { RejectReason } from "@/lib/apron/types";
+import { EthIcon } from "./eth-icon";
+import { useCadence } from "@/lib/cadence/provider";
+import { fmtBlock, fmtEth, timeAgo } from "@/lib/cadence/format";
+import { REJECT_REASONS } from "@/lib/cadence/types";
+import type { RejectReason } from "@/lib/cadence/types";
 
 const REASON_STYLE: Record<RejectReason, string> = {
   "no-slot": "border-danger/50 text-danger",
@@ -14,7 +15,7 @@ const REASON_STYLE: Record<RejectReason, string> = {
 };
 
 export function RejectLogPanel({ className = "" }: { className?: string }) {
-  const s = useApron();
+  const s = useCadence();
 
   return (
     <Panel
@@ -72,7 +73,7 @@ export function RejectLogPanel({ className = "" }: { className?: string }) {
               <p className="mt-2 font-mono text-xs leading-5 text-muted">
                 blk {fmtBlock(r.blockNumber)} · epoch #{r.epochId} · size{" "}
                 <span className="tabular-nums text-foreground">
-                  {fmtEth(r.tradeSize)} Ξ
+                  {fmtEth(r.tradeSize)} <EthIcon />
                 </span>
               </p>
             </li>

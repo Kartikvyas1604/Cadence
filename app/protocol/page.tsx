@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Ban } from "lucide-react";
 import { SiteFooter } from "@/components/site-footer";
-import { REJECT_REASONS } from "@/lib/apron/types";
+import { REJECT_REASONS } from "@/lib/cadence/types";
 
 export const metadata: Metadata = {
-  title: "Protocol — Apron",
+  title: "Protocol — Cadence",
   description:
-    "Active/passive reserves, the λ split, epoch refresh, and the beforeSwap apron-slot gate. How Apron works.",
+    "Active/passive reserves, the λ split, epoch refresh, and the beforeSwap cadence-slot gate. How Cadence works.",
 };
 
 function Section({
@@ -47,9 +47,9 @@ export default function ProtocolPage() {
             <em className="italic text-accent-strong">gate.</em>
           </h1>
           <p className="mt-5 max-w-prose text-base leading-7 text-muted md:text-lg md:leading-8">
-            Apron partitions a Uniswap v4 pool into active and passive reserves
+            Cadence partitions a Uniswap v4 pool into active and passive reserves
             every epoch, then sells the right to touch the active side as
-            ERC-1155 apron slots. No slot, no fill — the hook reverts before the
+            ERC-1155 cadence slots. No slot, no fill — the hook reverts before the
             swap reaches the pool.
           </p>
 
@@ -91,7 +91,7 @@ export default function ProtocolPage() {
             <p>
               On refresh, active reserves are recomputed from the new total,{" "}
               <span className="font-mono text-foreground">
-                every un-consumed apron slot is burned
+                every un-consumed cadence slot is burned
               </span>
               , and a fresh capacity budget is minted for the new epoch. Scarcity
               is real: capacity you don&apos;t use, you lose. That expiry is the
@@ -105,7 +105,7 @@ export default function ProtocolPage() {
               {[
                 [
                   "require slot ≥ size",
-                  "The caller (or router payer) must hold an apron slot for the current epoch with capacity ≥ trade size.",
+                  "The caller (or router payer) must hold a cadence slot for the current epoch with capacity ≥ trade size.",
                 ],
                 [
                   "burn / lock the notional",

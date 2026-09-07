@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { Ticket, TriangleAlert } from "lucide-react";
+import { EthIcon } from "./eth-icon";
 import { Panel } from "./panel";
-import { useApron, useApronActions } from "@/lib/apron/provider";
-import { fmtEth, fmtPricePerEth } from "@/lib/apron/format";
+import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
+import { fmtEth, fmtPricePerEth } from "@/lib/cadence/format";
 
 const PRESETS = [1, 2, 5];
 
-export function BuyApronPanel({ className = "" }: { className?: string }) {
-  const s = useApron();
-  const { buySlot } = useApronActions();
+export function BuyCadencePanel({ className = "" }: { className?: string }) {
+  const s = useCadence();
+  const { buySlot } = useCadenceActions();
   const [size, setSize] = useState<number>(2);
   const [pending, setPending] = useState(false);
 
@@ -35,7 +36,7 @@ export function BuyApronPanel({ className = "" }: { className?: string }) {
       className={className}
       id="buy"
       step="1 · buy"
-      title="Buy an apron slot"
+      title="Buy a cadence slot"
       caption="ERC-1155, current epoch only. Fixed primary price. Unused slots expire worthless."
     >
       {slot ? (
@@ -44,7 +45,7 @@ export function BuyApronPanel({ className = "" }: { className?: string }) {
             <div className="flex items-center gap-2 text-accent-strong">
               <Ticket className="size-4" aria-hidden />
               <p className="font-mono text-xs uppercase tracking-widest">
-                apron slot held
+                cadence slot held
               </p>
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-y-2 font-mono text-sm">
@@ -52,7 +53,7 @@ export function BuyApronPanel({ className = "" }: { className?: string }) {
               <dd className="tabular-nums text-foreground">#{slot.epochId}</dd>
               <dt className="text-muted">capacity</dt>
               <dd className="tabular-nums text-foreground">
-                {fmtEth(slot.capacity, 2)} Ξ
+                {fmtEth(slot.capacity, 2)} <EthIcon />
               </dd>
               <dt className="text-muted">expires</dt>
               <dd className="tabular-nums text-foreground">
@@ -73,7 +74,7 @@ export function BuyApronPanel({ className = "" }: { className?: string }) {
         <div className="flex flex-1 flex-col justify-center rounded-md border border-dashed border-border-strong p-4 text-center">
           <Ticket className="mx-auto size-6 text-muted" aria-hidden />
           <p className="mt-2 text-sm font-medium text-foreground">
-            No apron slot for epoch #{s.epochId}
+            No cadence slot for epoch #{s.epochId}
           </p>
           <p className="mt-1 text-xs text-muted">
             Swaps will revert at beforeSwap until you mint one.
@@ -98,7 +99,7 @@ export function BuyApronPanel({ className = "" }: { className?: string }) {
                   : "border-border text-muted hover:border-border-strong hover:text-foreground"
               }`}
             >
-              {p} Ξ
+              {p} <EthIcon />
             </button>
           ))}
           <button
@@ -111,7 +112,7 @@ export function BuyApronPanel({ className = "" }: { className?: string }) {
                 : "border-border text-muted hover:border-border-strong hover:text-foreground"
             }`}
           >
-            10 Ξ
+            10 <EthIcon />
           </button>
         </div>
       </fieldset>
@@ -120,13 +121,13 @@ export function BuyApronPanel({ className = "" }: { className?: string }) {
         <div className="flex items-baseline justify-between">
           <span className="text-muted">ask</span>
           <span className="tabular-nums text-foreground">
-            {fmtPricePerEth(ask)} Ξ / 1 Ξ cap
+            {fmtPricePerEth(ask)} <EthIcon /> / 1 <EthIcon /> cap
           </span>
         </div>
         <div className="flex items-baseline justify-between">
           <span className="text-muted">total</span>
           <span className="text-lg font-medium tabular-nums text-accent-strong">
-            {fmtEth(cost, 4)} Ξ
+            {fmtEth(cost, 4)} <EthIcon />
           </span>
         </div>
       </div>
@@ -134,8 +135,8 @@ export function BuyApronPanel({ className = "" }: { className?: string }) {
       {insufficient ? (
         <p className="mt-4 flex items-start gap-1.5 text-xs leading-5 text-danger">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          Wallet holds {fmtEth(s.wallet.eth, 3)} Ξ — not enough for this slot.
-          Pick smaller capacity.
+          Wallet holds {fmtEth(s.wallet.eth, 3)} <EthIcon /> — not enough for
+          this slot. Pick smaller capacity.
         </p>
       ) : null}
 
@@ -146,10 +147,16 @@ export function BuyApronPanel({ className = "" }: { className?: string }) {
         aria-busy={pending}
         className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-accent font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
       >
-        {pending ? "Minting…" : `Mint apron slot · ${fmtEth(cost, 4)} Ξ`}
+        {pending ? (
+          "Minting…"
+        ) : (
+          <>
+            Mint cadence slot · {fmtEth(cost, 4)} <EthIcon />
+          </>
+        )}
       </button>
       <p className="mt-3 text-center font-mono text-[11px] text-muted">
-        balance {fmtEth(s.wallet.eth, 3)} Ξ · slot ≠ LP equity
+        balance {fmtEth(s.wallet.eth, 3)} <EthIcon /> · slot ≠ LP equity
       </p>
     </Panel>
   );

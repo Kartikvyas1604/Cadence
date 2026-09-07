@@ -1,11 +1,12 @@
 "use client";
 
-import { useApron } from "@/lib/apron/provider";
-import { fmtBlock, fmtEth, fmtPct, fmtPricePerEth, fmtUsdc } from "@/lib/apron/format";
-import { activePriceUsd } from "@/lib/apron/types";
+import { useCadence } from "@/lib/cadence/provider";
+import { fmtBlock, fmtEth, fmtPct, fmtPricePerEth, fmtUsdc } from "@/lib/cadence/format";
+import { activePriceUsd } from "@/lib/cadence/types";
+import { EthIcon } from "./eth-icon";
 
 export function EpochBar() {
-  const s = useApron();
+  const s = useCadence();
   const price = activePriceUsd(s.pool);
   const totalEth = s.pool.activeReserveEth + s.pool.passiveReserveEth;
   const activeShare = s.pool.activeReserveEth / totalEth;
@@ -50,7 +51,7 @@ export function EpochBar() {
             slot ask
           </span>
           <span className="font-mono text-xl font-medium tabular-nums text-accent-strong">
-            {fmtPricePerEth(s.slotPricePerEth)} Ξ / 1Ξ cap
+            {fmtPricePerEth(s.slotPricePerEth)} <EthIcon /> / 1 <EthIcon /> cap
           </span>
         </div>
 
@@ -82,14 +83,14 @@ export function EpochBar() {
           <span>
             active{" "}
             <span className="tabular-nums text-accent-strong">
-              {fmtEth(s.pool.activeReserveEth, 1)} Ξ
+              {fmtEth(s.pool.activeReserveEth, 1)} <EthIcon />
             </span>{" "}
             · tradable this epoch
           </span>
           <span>
             passive{" "}
             <span className="tabular-nums text-foreground">
-              {fmtEth(s.pool.passiveReserveEth, 1)} Ξ
+              {fmtEth(s.pool.passiveReserveEth, 1)} <EthIcon />
             </span>{" "}
             · locked until refresh
           </span>

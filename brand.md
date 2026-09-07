@@ -1,4 +1,4 @@
-# Brand — Apron
+# Brand — Cadence
 
 **Status: locked** (user-directed: no theme prompting; agent picked per agent.md spec)
 
@@ -9,7 +9,7 @@ Near-black, one accent, serif titles, mono for sizes/epoch/slot balances. No pur
 ## Palette
 
 Warm near-black base, single amber accent. Warm grays throughout (never cool/blue-gray).
-Amber reads as workshop leather + terminal amber — fits "apron" (craft, execution, work surface).
+Amber reads as workshop leather + terminal amber — fits "cadence" (craft, execution, work surface).
 
 | Token | Value | Use |
 |---|---|---|
@@ -36,6 +36,6 @@ Amber accent on `#0B0A08` ≈ 9.2:1 · muted-foreground ≈ 5.4:1 · both AA.
 
 ## Voice
 
-Blunt, active, specific. Lead with **apron slot**: "Buy an apron slot for this epoch."
+Blunt, active, specific. Lead with **cadence slot**: "Buy a cadence slot for this epoch."
 Name the risk: unused slots expire worthless; seat ≠ LP equity. Never fake APY, never "guaranteed."
-Say apron slot — not SEAT, not permit, not ticket-quote. Explicitly not TAP / Dockyard / Parity.
+Say cadence slot — not SEAT, not permit, not ticket-quote. Explicitly not TAP / Dockyard / Parity.

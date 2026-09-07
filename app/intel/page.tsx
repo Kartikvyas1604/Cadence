@@ -3,9 +3,9 @@ import { SiteFooter } from "@/components/site-footer";
 import { IntelView } from "@/components/intel-view";
 
 export const metadata: Metadata = {
-  title: "Intel — Apron",
+  title: "Intel — Cadence",
   description:
-    "One paid Hedera x402 call returns a capacity/toxicity quote that writes the apron-slot ask.",
+    "One paid Hedera x402 call returns a capacity/toxicity quote that writes the cadence-slot ask.",
 };
 
 export default function IntelPage() {

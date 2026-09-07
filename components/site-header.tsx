@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ApronLogo } from "./logo";
+import { CadenceLogo } from "./logo";
 
 const NAV = [
   { href: "/protocol", label: "Protocol" },
@@ -17,8 +17,8 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 md:px-6 lg:px-8">
-        <Link href="/" className="rounded-sm" aria-label="Apron home">
-          <ApronLogo />
+        <Link href="/" className="rounded-sm" aria-label="Cadence home">
+          <CadenceLogo />
         </Link>
 
         <nav aria-label="Main">
