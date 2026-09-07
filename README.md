@@ -29,10 +29,22 @@ Explicitly **not** TAP (no Aqua take-permit) · not Dockyard (no fee desk) · no
 7. Paid x402 intel updates the ask.
 8. Close: ≠ TAP; named risks (slots expire worthless, seat ≠ equity).
 
+## Site map
+
+| Route | Purpose |
+|---|---|
+| `/` | Landing — the apron-slot pitch and the four rooms |
+| `/console` | Live demo console — buy, swap, rejects, graph, intel, **Run demo** |
+| `/protocol` | Mechanism — problem, λ split, epoch refresh, beforeSwap gate, rejects, honesty |
+| `/graph` | Subgraph explorer — mint/burn/consume feed, entities, notionals |
+| `/intel` | Hedera x402 — paid capacity/toxicity quote writes the ask |
+
+State is shared across routes via a global provider — the header ticker follows you from page to page.
+
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript + Tailwind v4
-- Brand: warm near-black + one amber accent, serif display + mono numerics (`brand.md`)
+- Brand: warm near-black + one amber accent, serif display + mono numerics (`brand.md`); SVG mark with negative-space slot
 - `lib/apron/` — typed protocol state machine (epoch refresh, slot mint, `beforeSwap` gate, rejects, intel). Simulated fork semantics; contract calls wire in at the same seams.
 - Planned: Uniswap v4 hook (Foundry) · The Graph Studio subgraph · Hedera x402 intel node
 
