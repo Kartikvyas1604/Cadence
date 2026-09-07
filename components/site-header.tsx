@@ -1,27 +1,55 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ApronLogo } from "./logo";
 
+const NAV = [
+  { href: "/protocol", label: "Protocol" },
+  { href: "/console", label: "Console" },
+  { href: "/graph", label: "Graph" },
+  { href: "/intel", label: "Intel" },
+] as const;
+
 export function SiteHeader() {
+  const pathname = usePathname();
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 md:px-6 lg:px-8">
-        <Link
-          href="/"
-          className="rounded-sm"
-          aria-label="Apron home"
-        >
+        <Link href="/" className="rounded-sm" aria-label="Apron home">
           <ApronLogo />
         </Link>
 
-        <div className="flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-mono text-xs text-muted md:inline-flex">
-            <span className="size-1.5 rounded-full bg-success" aria-hidden />
-            anvil fork · live
-          </span>
-          <span className="inline-flex items-center rounded-full border border-border px-3 py-1.5 font-mono text-xs text-muted">
-            ETHOnline 2026
-          </span>
-        </div>
+        <nav aria-label="Main">
+          <ul className="flex items-center gap-1">
+            {NAV.map((item) => {
+              const active = pathname === item.href;
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`inline-flex h-10 items-center rounded-md px-3 text-sm transition-colors duration-100 ${
+                      active
+                        ? "bg-accent/10 text-accent-strong"
+                        : "text-muted hover:bg-surface-raised hover:text-foreground"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <Link
+          href="/console"
+          className="hidden h-10 items-center rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px sm:inline-flex"
+        >
+          Buy a slot
+        </Link>
       </div>
     </header>
   );

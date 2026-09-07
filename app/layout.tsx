@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
+import { SiteHeader } from "@/components/site-header";
+import { EpochTicker } from "@/components/epoch-ticker";
+import { ApronProvider } from "@/lib/apron/provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +35,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full motion-safe:scroll-smooth antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background font-sans text-foreground">
-        {children}
+        <ApronProvider>
+          <SiteHeader />
+          <EpochTicker />
+          {children}
+        </ApronProvider>
       </body>
     </html>
   );
