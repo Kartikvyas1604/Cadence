@@ -5,7 +5,7 @@ import { CheckCircle2, Eye, Lock, TriangleAlert } from "lucide-react";
 import { EthIcon } from "./eth-icon";
 import { Panel } from "./panel";
 import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
-import { commitHash, randomSalt, shortHash } from "@/lib/cadence/hash";
+import { commitHash, shortHash } from "@/lib/cadence/hash";
 import { fmtEth, fmtPricePerEth, timeAgo } from "@/lib/cadence/format";
 import type { CommitmentStatus } from "@/lib/cadence/types";
 
@@ -21,12 +21,13 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
   const s = useCadence();
   const { commitMint, attemptSwap, attemptBadReveal } = useCadenceActions();
   const [size, setSize] = useState<number>(1.5);
-  const [salt] = useState(() => randomSalt());
   const [pending, setPending] = useState<null | "commit" | "reveal" | "bad">(null);
 
+  // deterministic preview only — the commit itself gets a fresh random salt
+  // inside the provider, so nothing random is rendered during SSR/hydration
   const H = useMemo(
-    () => commitHash(size, s.epochId, salt),
-    [size, s.epochId, salt],
+    () => commitHash(size, s.epochId, "preview"),
+    [size, s.epochId],
   );
 
   const cost = size * s.slotPricePerEth;
@@ -83,7 +84,7 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
           {shortHash(H)}
         </p>
         <p className="mt-1 font-mono text-[11px] text-muted">
-          salt {salt.slice(0, 8)}… · generated client-side · revealed at consume
+          salt · generated fresh at commit · revealed at consume
         </p>
       </div>
 
