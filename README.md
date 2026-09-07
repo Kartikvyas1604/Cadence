@@ -1,61 +1,144 @@
+<div align="center">
+
+<img src="public/logo.svg" width="96" alt="Cadence logo" />
+
 # Cadence
 
 **Scarce per-epoch execution capacity, sold as ERC-1155 cadence slots.**
 
-Buy a cadence slot for this epoch → swap against **active** reserves only → without a slot (or oversize / same-block passive unlock) the trade **reverts** at `beforeSwap`. The Graph indexes mint/burn/consume; Hedera x402 paid intel writes the cadence-slot ask.
+*Buy a cadence slot for this epoch. Swap against active depth. No slot, no fill.*
 
-Explicitly **not** TAP (no Aqua take-permit) · not Dockyard (no fee desk) · not Parity (no peg desk). No fake APY. No finalist guarantee.
+Next.js 16 · TypeScript · Uniswap v4 hook · The Graph · Hedera x402
 
-## Console
+</div>
+
+---
+
+## Why Cadence exists
+
+In a constant-function pool, an arbitrageur who spots a stale price can drain the
+full depth in one block. The liquidity provider eats the loss — LVR — while the
+arb keeps the spread.
+
+The status quo for deciding **who gets depth** is a gas race, JIT liquidity, or a
+private RFQ desk. None of them pay the LP for the capacity they are giving away.
+
+Cadence makes depth a **scarce, priced, time-boxed resource** — and sells it.
+
+## The mechanism
+
+Every epoch, a Uniswap v4 hook partitions the pool and sells the right to touch
+the active side.
+
+**1 · The split.** Total reserves are divided by a fixed ratio λ (25% active in
+this demo). The active side is tradable this epoch. The passive side stays locked
+until refresh — it cannot be reached by splitting an order across blocks.
+
+**2 · The gate.** Three checks run in `beforeSwap` before any swap touches the
+pool:
+
+| Check | Meaning |
+|---|---|
+| Slot ≥ size | The trader must hold a cadence slot for the current epoch with enough capacity |
+| Burn the notional | Consumed capacity is burned — capacity is single-use per epoch |
+| Active only | The fill executes against active reserves. Passive is untouchable, full stop |
+
+**3 · The refresh.** At epoch end, every un-consumed slot is burned, active
+reserves are recomputed, and a fresh capacity budget mints. Capacity you don't
+use, you lose.
+
+**4 · The rejects.** Reverting is a feature. Every refusal is public and indexed:
+
+- **No slot** — the trader holds no cadence slot for this epoch
+- **Oversize** — the trade exceeds the slot's capacity
+- **Same-block passive unlock** — a split order tries to reach locked reserves
+
+**The whole loop in one line:**
+
+> Buy a cadence slot → swap against active depth → fill. Without a slot (or
+> oversize, or reaching for passive) the trade reverts before it touches the pool.
+
+## What a slot is — and is not
+
+A cadence slot is a **capacity ticket**: the right to fill up to a size against
+this epoch's active reserves, at a fixed primary price, minted as ERC-1155.
+
+A slot is **not** LP equity, **not** a yield claim, **not** a take-permit against
+a named maker. Explicitly not TAP, not Dockyard, not Parity. No fake APY. No
+guarantees.
+
+Unused slots expire worthless at refresh. That expiry is the honesty of the
+instrument — a slot is a time-slice, not equity.
+
+## The console
+
+A live demo console proves every claim on one screen:
 
 | Panel | What it proves |
 |---|---|
 | Buy a cadence slot | Fixed-price ERC-1155 mint, current epoch only, expiry named |
-| Swap | `beforeSwap` gate: slot ≥ size, notional burned, active-only quote |
-| Reject log | No-slot / oversize / same-block passive-unlock reverts, live |
-| Graph panel | Mint/burn/consume index feed with per-epoch notionals |
+| Swap | The gate: slot ≥ size, notional burned, active-only quote |
+| Reject log | No-slot / oversize / passive-unlock reverts, live |
+| Graph panel | Mint / burn / consume index feed with per-epoch notionals |
 | Pay for the ask | One paid x402 call on Hedera writes the slot ask |
 
-**Judge demo:** press **Run demo** — it plays buy → fill → reject-without → reject-oversize → paid intel in one run.
+**Judge demo** — press Run demo and it plays the entire loop in one take:
+buy slot → fill → reject without → reject oversize → paid intel.
 
-## Demo script (≤ 4 min)
+## Paid intel writes the price
 
-1. Swap without a slot — reverts on camera.
-2. Cadence = scarce epoch execution capacity (gate slots).
-3. Mint an ERC-1155 cadence slot.
-4. Same-size swap now fills against active depth.
-5. Same-block split cannot unlock passive — revert.
-6. Graph panel updates mint/consume.
-7. Paid x402 intel updates the ask.
-8. Close: ≠ TAP; named risks (slots expire worthless, seat ≠ equity).
+Capacity pricing shouldn't be a hardcoded constant. One paid Hedera x402 call
+returns a capacity/toxicity quote that **writes the cadence-slot ask** — real
+payment, real intel, visible in the UI. One quote, one payment, no subscription.
 
-## Site map
+## Explore
 
 | Route | Purpose |
 |---|---|
-| `/` | Landing — the cadence-slot pitch and the four rooms |
-| `/console` | Live demo console — buy, swap, rejects, graph, intel, **Run demo** |
-| `/protocol` | Mechanism — problem, λ split, epoch refresh, beforeSwap gate, rejects, honesty |
-| `/graph` | Subgraph explorer — mint/burn/consume feed, entities, notionals |
-| `/intel` | Hedera x402 — paid capacity/toxicity quote writes the ask |
+| `/` | Landing — the cadence-slot pitch |
+| `/console` | Live demo console — buy, swap, rejects, graph, intel, Run demo |
+| `/protocol` | Mechanism — problem, λ split, refresh, gate, rejects, honesty |
+| `/graph` | Subgraph explorer — mint / burn / consume feed and entities |
+| `/intel` | Hedera x402 — the paid quote that writes the ask |
 
-State is shared across routes via a global provider — the header ticker follows you from page to page.
+State is shared across routes through a global provider — the epoch ticker
+follows you from page to page.
 
-## Stack
+## Design
 
-- Next.js 16 (App Router) + TypeScript + Tailwind v4
-- Brand: warm near-black + one amber accent, serif display + mono numerics (`brand.md`); SVG mark with negative-space slot
-- `lib/cadence/` — typed protocol state machine (epoch refresh, slot mint, `beforeSwap` gate, rejects, intel). Simulated fork semantics; contract calls wire in at the same seams.
-- Planned: Uniswap v4 hook (Foundry) · The Graph Studio subgraph · Hedera x402 intel node
+Warm near-black with a single amber accent, serif display type against mono
+numerics. Near-black `#0B0A08`, amber `#F0B441` at roughly 9.2:1 contrast, warm
+grays throughout — never cool. The full system lives in
+[brand.md](brand.md).
 
-## Develop
+## Roadmap
 
-```bash
-npm run dev   # http://localhost:3000
-npm run build
-npm run lint
-```
+- [x] Typed protocol state machine — epoch refresh, slot mint, gate, rejects, intel
+- [x] Demo console with live reject paths and judge demo
+- [x] Simulated fork semantics; contract calls wire in at the same seams
+- [ ] Uniswap v4 hook (Foundry) — real `beforeSwap` gate on-chain
+- [ ] The Graph Studio subgraph — production indexing
+- [ ] Hedera x402 intel node — live paid quotes
+
+## Run it locally
+
+| Command | What it does |
+|---|---|
+| `npm install` | Install dependencies |
+| `npm run dev` | Start the dev server at localhost:3000 |
+| `npm run build` | Production build |
+| `npm run lint` | Lint |
 
 ## Named risks
 
-Unused cadence slots expire worthless at epoch refresh. A slot is capacity, not LP equity. Active depth is capped at λ × total reserves.
+> **Say it plainly:** unused cadence slots expire worthless at epoch refresh.
+> A slot is capacity, not LP equity. Active depth is capped at λ × total
+> reserves. Scarcity is the product — and it cuts both ways.
+
+---
+
+<div align="center">
+
+**Cadence** — depth you can gate.
+
+</div>
