@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCadence } from "@/lib/cadence/provider";
 import { fmtEth, fmtUsdc } from "@/lib/cadence/format";
 import { EthIcon } from "./eth-icon";
@@ -11,6 +11,8 @@ const H = 240;
 const PAD = { top: 16, right: 14, bottom: 24, left: 14 };
 const VISIBLE = 180;
 const CANDLE_GROUP = 4;
+const MIN_SPAN = 24;
+const DEFAULT_SPAN = 120;
 
 type ViewMode = "line" | "candles" | "depth";
 
@@ -23,7 +25,34 @@ const VIEWS: { key: ViewMode; label: string; hint: string }[] = [
 export function PriceChart({ className = "" }: { className?: string }) {
   const s = useCadence();
   const [view, setView] = useState<ViewMode>("line");
-  const points = s.priceHistory.slice(-VISIBLE);
+  const [span, setSpan] = useState(DEFAULT_SPAN);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  // wheel zoom on the plot — native listener so preventDefault works
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.deltaY) return;
+      e.preventDefault();
+      setSpan((cur) => {
+        const next = e.deltaY < 0 ? Math.round(cur / 1.4) : Math.round(cur * 1.4);
+        return Math.min(VISIBLE, Math.max(MIN_SPAN, next));
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const zoom = (dir: "in" | "out") =>
+    setSpan((cur) => {
+      const next = dir === "in" ? Math.round(cur / 1.4) : Math.round(cur * 1.4);
+      return Math.min(VISIBLE, Math.max(MIN_SPAN, next));
+    });
+
+  const all = s.priceHistory.slice(-VISIBLE);
+  // right-anchored zoom window: newest blocks always visible
+  const points = all.slice(Math.max(0, all.length - span));
 
   const actives = points.map((p) => p.activeUsd);
   const passives = points.map((p) => p.passiveUsd);
@@ -156,31 +185,70 @@ export function PriceChart({ className = "" }: { className?: string }) {
               </>
             )}
 
-            <div
-              role="group"
-              aria-label="Tape view mode"
-              className="flex rounded-md border border-border bg-surface-raised p-0.5"
-            >
-              {VIEWS.map((v) => (
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                role="group"
+                aria-label="Tape view mode"
+                className="flex rounded-md border border-border bg-surface-raised p-0.5"
+              >
+                {VIEWS.map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    aria-pressed={view === v.key}
+                    title={v.hint}
+                    onClick={() => setView(v.key)}
+                    className={`h-9 rounded-[5px] px-3.5 font-mono text-xs uppercase tracking-widest transition-colors duration-100 ${
+                      view === v.key
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+
+              <div
+                role="group"
+                aria-label="Tape zoom"
+                className="flex items-center rounded-md border border-border bg-surface-raised p-0.5"
+              >
                 <button
-                  key={v.key}
                   type="button"
-                  aria-pressed={view === v.key}
-                  title={v.hint}
-                  onClick={() => setView(v.key)}
-                  className={`h-9 rounded-[5px] px-3.5 font-mono text-xs uppercase tracking-widest transition-colors duration-100 ${
-                    view === v.key
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted hover:text-foreground"
-                  }`}
+                  title="Zoom out — more blocks"
+                  aria-label="Zoom out"
+                  onClick={() => zoom("out")}
+                  disabled={span >= VISIBLE}
+                  className="inline-flex h-9 w-10 items-center justify-center rounded-[5px] font-mono text-sm text-muted transition-colors duration-100 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
                 >
-                  {v.label}
+                  −
                 </button>
-              ))}
+                <button
+                  type="button"
+                  title="Reset zoom"
+                  aria-label={`Zoom window: last ${span} blocks. Click to reset`}
+                  onClick={() => setSpan(DEFAULT_SPAN)}
+                  className="inline-flex h-9 min-w-14 items-center justify-center rounded-[5px] px-2 font-mono text-xs tabular-nums text-foreground transition-colors duration-100 hover:bg-surface hover:text-accent"
+                >
+                  {span}b
+                </button>
+                <button
+                  type="button"
+                  title="Zoom in — fewer blocks"
+                  aria-label="Zoom in"
+                  onClick={() => zoom("in")}
+                  disabled={span <= MIN_SPAN}
+                  className="inline-flex h-9 w-10 items-center justify-center rounded-[5px] font-mono text-base text-muted transition-colors duration-100 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
 
           <svg
+            ref={svgRef}
             viewBox={`0 0 ${W} ${H}`}
             preserveAspectRatio="none"
             className="h-44 w-full flex-1"
@@ -393,6 +461,9 @@ export function PriceChart({ className = "" }: { className?: string }) {
                 </>
               ) : null}
             </div>
+            <span className="text-muted/70">
+              scroll to zoom · newest right · {span}/{VISIBLE} blk
+            </span>
             <span>
               {view === "depth" ? (
                 <>
