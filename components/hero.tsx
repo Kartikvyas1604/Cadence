@@ -1,4 +1,5 @@
-import { ArrowDown } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 const steps = [
   {
@@ -39,19 +40,19 @@ export function Hero() {
         </p>
 
         <div className="mt-9 flex flex-wrap items-center gap-3">
-          <a
-            href="#console"
+          <Link
+            href="/console"
             className="inline-flex h-12 items-center gap-2 rounded-md bg-accent px-6 font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px"
           >
             Open the console
-            <ArrowDown className="size-4" aria-hidden />
-          </a>
-          <a
-            href="#console"
+            <ArrowRight className="size-4" aria-hidden />
+          </Link>
+          <Link
+            href="/protocol"
             className="inline-flex h-12 items-center rounded-md border border-border-strong px-6 font-medium text-foreground transition-colors duration-100 hover:bg-surface-raised active:translate-y-px"
           >
-            Watch a swap get rejected
-          </a>
+            How the mechanism works
+          </Link>
         </div>
 
         <ol className="mt-16 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
