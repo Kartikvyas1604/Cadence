@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CadenceLogo } from "./logo";
+import { WalletButton } from "./wallet-button";
 
 const NAV = [
   { href: "/protocol", label: "Protocol" },
@@ -44,12 +45,15 @@ export function SiteHeader() {
           </ul>
         </nav>
 
-        <Link
-          href="/console"
-          className="hidden h-10 items-center rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px sm:inline-flex"
-        >
-          Buy a slot
-        </Link>
+        <div className="flex items-center gap-3">
+          <WalletButton />
+          <Link
+            href="/console"
+            className="hidden h-10 items-center rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px sm:inline-flex"
+          >
+            Buy a slot
+          </Link>
+        </div>
       </div>
     </header>
   );
