@@ -54,6 +54,53 @@ function appendPrice(
   ].slice(-MAX_PRICE_POINTS);
 }
 
+const SEED_POINTS = 120;
+
+/** Deterministic PRNG so the seeded history renders identically on server and client. */
+function seedNoise(i: number): number {
+  let s = (i * 2654435761) % 4294967296;
+  s ^= s << 13;
+  s >>>= 0;
+  s ^= s >>> 17;
+  s ^= s << 5;
+  s >>>= 0;
+  return s / 4294967296;
+}
+
+/**
+ * 120 blocks of prior pool history so the tape opens full instead of empty.
+ * Fully deterministic — no Date.now / Math.random — so hydration never mismatches.
+ */
+function seedPriceHistory(
+  startBlock: number,
+  startEpoch: number,
+  epochLength: number,
+): PricePoint[] {
+  const pts: PricePoint[] = [];
+  const firstEpoch = startEpoch - epochLength;
+  for (let i = 0; i < SEED_POINTS; i++) {
+    const inEpoch = i % epochLength;
+    const epochId = firstEpoch + Math.floor(i / epochLength);
+    const n = seedNoise(i);
+    // active price wanders gently around the pool spot
+    const activeUsd =
+      2500 + Math.sin(i / 6) * 10 + (n - 0.5) * 6;
+    // passive reprices only at refresh — a flat step per epoch
+    const passiveUsd = 2496 + ((epochId * 7) % 11);
+    // active depth drains through the epoch, resets at refresh
+    const activeEth = 30 - inEpoch * 0.55 + (n - 0.5) * 0.4;
+    pts.push({
+      block: startBlock - (SEED_POINTS - i),
+      epochId,
+      activeUsd,
+      passiveUsd,
+      activeEth,
+      passiveEth: 90,
+    });
+  }
+  return pts;
+}
+
 export function createWorld(): WorldState {
   const activeEth = 120;
   const price = 2_500;
@@ -84,7 +131,11 @@ export function createWorld(): WorldState {
     rejects: [],
     commitments: [],
     swaps: [],
-    priceHistory: [],
+    priceHistory: seedPriceHistory(
+      41_200_100,
+      3_204,
+      EPOCH_LENGTH_BLOCKS,
+    ),
     lastIntelError: null,
   };
 }
