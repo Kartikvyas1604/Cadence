@@ -21,7 +21,10 @@ import { REJECT_REASONS } from "./types";
 const IntelContext = createContext<WorldState | null>(null);
 const ActionsContext = createContext<{
   buySlot: (sizeEth: number) => Promise<void>;
-  attemptSwap: (sizeEth: number, opts: { withoutSlot?: boolean; oversize?: boolean; reachPassive?: boolean }) => Promise<"filled" | RejectReason>;
+  attemptSwap: (
+    sizeEth: number,
+    opts?: { withoutSlot?: boolean; oversize?: boolean; reachPassive?: boolean },
+  ) => Promise<"filled" | RejectReason>;
   refreshIntel: () => Promise<boolean>;
 } | null>(null);
 
@@ -31,7 +34,9 @@ export function ApronProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, createWorld);
   const [, startTransition] = useTransition();
   const stateRef = useRef(state);
-  stateRef.current = state;
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     const t = setInterval(() => {
