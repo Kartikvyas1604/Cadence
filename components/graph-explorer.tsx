@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { GraphPanel } from "./graph-panel";
+import { LvrPanel } from "./lvr-panel";
 import { EthIcon } from "./eth-icon";
 import { useCadence } from "@/lib/cadence/provider";
 import { fmtEth } from "@/lib/cadence/format";
@@ -61,9 +62,10 @@ export function GraphExplorer() {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">
           <GraphPanel className="lg:col-span-2" />
+          <LvrPanel className="lg:col-span-1" />
           <section
             aria-label="Subgraph entities"
-            className="rounded-lg border border-border bg-surface p-5 lg:col-span-1"
+            className="rounded-lg border border-border bg-surface p-5 lg:col-span-2"
           >
             <h2 className="font-serif text-xl text-foreground">Entities</h2>
             <dl className="mt-4 space-y-4">
