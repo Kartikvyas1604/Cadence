@@ -1,6 +1,13 @@
+import { keccak256, toHex } from "viem";
 import type { IntelQuote, PricePoint, RejectEvent, WorldState } from "./types";
 import { REJECT_REASONS } from "./types";
 import { commitHash } from "./hash";
+
+function saltToHex(salt: string): `0x${string}` {
+  return (/^0x[0-9a-fA-F]{64}$/.test(salt)
+    ? (salt as `0x${string}`)
+    : (keccak256(toHex(salt)) as `0x${string}`));
+}
 
 const MAX_PRICE_POINTS = 180;
 
@@ -213,7 +220,7 @@ export function reducer(state: WorldState, action: Action): WorldState {
       const epochId = state.chain.epochId;
       const blockNumber = state.chain.blockNumber;
       if (epochId === null || blockNumber === null) return state;
-      const H = commitHash(action.sizeEth, epochId, action.salt);
+      const H = commitHash(action.sizeEth, epochId, saltToHex(action.salt));
       const id = takeCommitmentId();
       return {
         ...state,
@@ -266,7 +273,7 @@ export function reducer(state: WorldState, action: Action): WorldState {
       if (!c || c.status !== "committed") {
         return addReject(state, "no-slot", action.sizeEth, REJECT_REASONS["no-slot"].detail);
       }
-      if (commitHash(action.sizeEth, epochId, action.salt) !== c.H) {
+      if (commitHash(action.sizeEth, epochId, saltToHex(action.salt)) !== c.H) {
         return addReject(state, "bad-reveal", action.sizeEth, REJECT_REASONS["bad-reveal"].detail);
       }
       const revealed = state.commitments.map((x) =>

@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:contracts": "cd contracts && forge test",
+    "deploy:anvil": "cd contracts && forge script script/DeployCadence.s.sol --rpc-url http://localhost:8545 --broadcast --slow"
   },
   "dependencies": {
     "@x402/core": "^2.25.0",

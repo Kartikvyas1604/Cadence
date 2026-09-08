@@ -1,33 +1,24 @@
+import { keccak256, encodeAbiParameters, parseUnits } from "viem";
+
 /**
- * Demo stand-in for the onchain commitment:
+ * Real commitment hash — must match CadenceSlots.commitHash exactly:
  *   H = keccak256(abi.encode(size, epochId, salt))
- * Deterministic per (size, epochId, salt) so reveal verification in the
- * reducer mirrors the hook's check. Contracts use keccak256; this is UI-only.
+ * `sizeEth` is converted to wei so the client-side H equals the contract's.
  */
-export function commitHash(size: number, epochId: number, salt: string): string {
-  const input = `cadence-intent:${size.toFixed(6)}:${epochId}:${salt}`;
-  let h = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  let s = h || 0x9e3779b9;
-  let out = "0x";
-  for (let i = 0; i < 32; i++) {
-    s ^= s << 13;
-    s >>>= 0;
-    s ^= s >>> 17;
-    s ^= s << 5;
-    s >>>= 0;
-    out += ((s >>> 24) & 0xff).toString(16).padStart(2, "0");
-  }
-  return out;
+export function commitHash(sizeEth: number, epochId: number, salt: `0x${string}`): `0x${string}` {
+  const sizeWei = parseUnits(String(sizeEth), 18);
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: "uint256" }, { type: "uint256" }, { type: "bytes32" }],
+      [sizeWei, BigInt(epochId), salt],
+    ),
+  );
 }
 
-export function randomSalt(): string {
-  const bytes = new Uint8Array(16);
+export function randomSalt(): `0x${string}` {
+  const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}` as `0x${string}`;
 }
 
 export function shortHash(H: string): string {

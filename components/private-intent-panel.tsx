@@ -5,6 +5,7 @@ import { CheckCircle2, Eye, Lock, TriangleAlert } from "lucide-react";
 import { EthIcon } from "./eth-icon";
 import { Panel } from "./panel";
 import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
+import { keccak256, toHex } from "viem";
 import { commitHash, shortHash } from "@/lib/cadence/hash";
 import { fmtEth, fmtPricePerEth, timeAgo } from "@/lib/cadence/format";
 import type { CommitmentStatus } from "@/lib/cadence/types";
@@ -26,7 +27,8 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
   // deterministic preview only — the commit itself gets a fresh random salt
   // inside the provider, so nothing random is rendered during SSR/hydration
   const H = useMemo(
-    () => commitHash(size, s.chain.epochId ?? 0, "preview"),
+    () =>
+      commitHash(size, s.chain.epochId ?? 0, keccak256(toHex("cadence-intent-preview"))),
     [size, s.chain.epochId],
   );
 
