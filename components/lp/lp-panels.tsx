@@ -6,19 +6,67 @@ import { EthIcon } from "@/components/eth-icon";
 import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
 import { fmtEth } from "@/lib/cadence/format";
 
+/** Inline status banner for LP panels — honest wiring + tx feedback. */
+function LpNotice({
+  kind,
+  children,
+}: {
+  kind: "warn" | "error" | "success";
+  children: React.ReactNode;
+}) {
+  const style =
+    kind === "warn"
+      ? "border-info/50 bg-info/5 text-info"
+      : kind === "error"
+        ? "border-danger/50 bg-danger/5 text-danger"
+        : "border-success/50 bg-success/5 text-success";
+  return (
+    <p
+      role="status"
+      className={`rounded-md border px-3 py-2 text-xs leading-5 ${style}`}
+    >
+      {children}
+    </p>
+  );
+}
+
 /**
  * LP deposit — ETH into the venue. Shares are equity in the pool;
  * the λ-partitioned active side becomes the epoch's capacity budget.
+ * The form is always usable: submit runs the real deposit, or explains
+ * inline why the LP module must land first (no fake success).
  */
 export function LpDepositPanel({ className = "" }: { className?: string }) {
   const s = useCadence();
   const { depositLpEth } = useCadenceActions();
   const [amount, setAmount] = useState("1");
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
 
   const wired = s.lp.available === true;
   const num = Number(amount);
-  const canDeposit = wired && !!s.wallet.address && num > 0 && !pending;
+  const valid = Number.isFinite(num) && num > 0;
+  const canDeposit = !!s.wallet.address && valid && !pending;
+
+  async function submit() {
+    if (!canDeposit) return;
+    setError(null);
+    setDone(false);
+    if (!wired) {
+      setError(
+        "The LP accounting module is not deployed on this chain yet — this deposit needs it on-chain. No transaction was sent.",
+      );
+      return;
+    }
+    setPending(true);
+    try {
+      await depositLpEth(num);
+      setDone(true);
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <Panel
@@ -28,21 +76,16 @@ export function LpDepositPanel({ className = "" }: { className?: string }) {
       caption="Your deposit joins the pool. The λ split of it becomes this epoch's cadence-slot capacity."
       className={className}
     >
-      {!wired ? (
+      {!s.wallet.address ? (
         <div className="flex flex-1 flex-col items-start justify-center gap-2 py-6">
           <p className="font-mono text-xs uppercase tracking-widest text-muted">
-            {s.lp.available === false ? "LP module not deployed yet" : "checking chain…"}
+            connect a wallet to deposit
           </p>
           <p className="max-w-sm text-sm leading-6 text-muted">
-            The deposit, revenue, and withdraw fields go live the moment the LP
-            accounting lands on the deployed hook. Pool capacity below is live
-            already.
+            Deposits mint pool shares — your claim on the venue, not cadence
+            slots. Use the wallet button in the header.
           </p>
         </div>
-      ) : !s.wallet.address ? (
-        <p className="flex flex-1 items-center justify-center py-6 text-sm text-muted">
-          Connect a wallet to deposit.
-        </p>
       ) : (
         <div className="flex flex-1 flex-col gap-4">
           <div>
@@ -52,7 +95,11 @@ export function LpDepositPanel({ className = "" }: { className?: string }) {
             >
               amount (ETH)
             </label>
-            <div className="flex items-center gap-2 rounded-md border border-border-strong bg-surface-raised px-3 focus-within:border-accent">
+            <div
+              className={`flex items-center gap-2 rounded-md border bg-surface-raised px-3 focus-within:border-accent ${
+                error && !valid ? "border-danger" : "border-border-strong"
+              }`}
+            >
               <input
                 id="lp-deposit-amount"
                 type="number"
@@ -60,31 +107,74 @@ export function LpDepositPanel({ className = "" }: { className?: string }) {
                 min="0"
                 step="0.01"
                 autoComplete="off"
+                aria-invalid={valid ? undefined : "true"}
+                aria-describedby={error ? "lp-deposit-error" : undefined}
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setError(null);
+                  setDone(false);
+                }}
                 className="h-11 w-full bg-transparent font-mono tabular-nums text-foreground outline-none"
               />
               <span className="shrink-0 font-mono text-xs text-muted">
                 <EthIcon className="inline size-3 align-[-1px]" /> ETH
               </span>
             </div>
+            <div className="mt-2 flex gap-2">
+              {["0.1", "1", "5"].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => {
+                    setAmount(v);
+                    setError(null);
+                    setDone(false);
+                  }}
+                  className="h-8 min-w-10 rounded-md border border-border px-2.5 font-mono text-xs tabular-nums text-muted transition-colors duration-100 hover:border-accent hover:text-accent-strong"
+                >
+                  {v}
+                </button>
+              ))}
+              {s.wallet.eth != null ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAmount(String(Math.max(0, s.wallet.eth ?? 0) - 0.1));
+                    setError(null);
+                    setDone(false);
+                  }}
+                  className="h-8 rounded-md border border-border px-2.5 font-mono text-xs tabular-nums text-muted transition-colors duration-100 hover:border-accent hover:text-accent-strong"
+                >
+                  max
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <button
             type="button"
             disabled={!canDeposit}
-            onClick={async () => {
-              setPending(true);
-              try {
-                await depositLpEth(num);
-              } finally {
-                setPending(false);
-              }
-            }}
+            onClick={submit}
             className="inline-flex h-11 min-w-24 items-center justify-center rounded-md bg-accent px-5 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
           >
             {pending ? "depositing…" : "deposit"}
           </button>
+
+          {error ? (
+            <div id="lp-deposit-error" aria-live="polite">
+              <LpNotice kind="error">{error}</LpNotice>
+            </div>
+          ) : null}
+          {done && !error ? (
+            <LpNotice kind="success">Deposit sent — position updates on the next block.</LpNotice>
+          ) : null}
+          {wired ? null : (
+            <LpNotice kind="warn">
+              Waiting on the LP accounting module: the form is ready, and the
+              deposit will go through the moment it lands on this chain.
+            </LpNotice>
+          )}
 
           <p className="text-xs leading-5 text-muted">
             You receive pool shares — not cadence slots. Slots are expiring
@@ -291,7 +381,9 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
   const wired = s.lp.available === true;
   const num = Number(shares);
   const withdrawable = s.lp.position?.withdrawableEth ?? null;
-  const canWithdraw = wired && !!s.wallet.address && num > 0 && !pending;
+  const canWithdraw = !!s.wallet.address && num > 0 && !pending;
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
 
   return (
     <Panel
@@ -301,7 +393,7 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
       caption="You cannot pull liquidity that would orphan capacity already sold this epoch."
       className={className}
     >
-      {wired && s.wallet.address ? (
+      {s.wallet.address ? (
         <div className="flex flex-1 flex-col gap-4">
           <div className="flex items-baseline justify-between">
             <label
@@ -321,7 +413,11 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-md border border-border-strong bg-surface-raised px-3 focus-within:border-accent">
+          <div
+            className={`flex items-center gap-2 rounded-md border bg-surface-raised px-3 focus-within:border-accent ${
+              error && num <= 0 ? "border-danger" : "border-border-strong"
+            }`}
+          >
             <input
               id="lp-withdraw-shares"
               type="number"
@@ -339,9 +435,18 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
               type="button"
               disabled={!canWithdraw}
               onClick={async () => {
+                setError(null);
+                setDone(false);
+                if (!wired) {
+                  setError(
+                    "The LP accounting module is not deployed on this chain yet — withdrawal needs it on-chain. No transaction was sent.",
+                  );
+                  return;
+                }
                 setPending(true);
                 try {
                   await withdrawLpEth(num);
+                  setDone(true);
                 } finally {
                   setPending(false);
                 }
@@ -352,14 +457,14 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
             </button>
             <button
               type="button"
-              disabled={!canWithdraw}
+              disabled={!canWithdraw || withdrawable == null}
               onClick={async () => {
                 // demo: attempt more than the safety bound allows — the
                 // contract reverts UnsafeWithdraw() into the reject log
-                if (withdrawable == null) return;
+                setError(null);
                 setPending(true);
                 try {
-                  await withdrawLpEth(withdrawable + 500);
+                  await withdrawLpEth((withdrawable ?? 0) + 500);
                 } finally {
                   setPending(false);
                 }
@@ -369,6 +474,16 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
               try unsafe withdraw
             </button>
           </div>
+          {error ? (
+            <div aria-live="polite">
+              <LpNotice kind="error">{error}</LpNotice>
+            </div>
+          ) : null}
+          {done && !error ? (
+            <LpNotice kind="success">
+              Withdraw sent — proceeds and the revenue claim settle on the next block.
+            </LpNotice>
+          ) : null}
           <p className="text-xs leading-5 text-muted">
             Withdrawable = your pro-rata share of passive + unsold active. The
             unsafe path reverts <span className="font-mono">UNSAFE_WITHDRAW</span>{" "}
@@ -378,11 +493,11 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
       ) : (
         <div className="flex flex-1 flex-col items-start justify-center gap-2 py-6">
           <p className="font-mono text-xs uppercase tracking-widest text-muted">
-            {s.lp.available === false ? "LP module not deployed yet" : "connect a wallet"}
+            connect a wallet to withdraw
           </p>
           <p className="max-w-sm text-sm leading-6 text-muted">
             Withdraw safety runs in the hook: it reverts rather than orphan sold
-            capacity. This panel activates with the LP module.
+            capacity.
           </p>
         </div>
       )}
