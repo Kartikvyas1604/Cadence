@@ -55,6 +55,13 @@ export function initialWorld(): WorldState {
     },
     pool: null,
     wallet: { address: null, eth: null, slot: null },
+    lp: {
+      available: null,
+      position: null,
+      swapFeeBps: null,
+      slotRevenueShareBps: null,
+      soldCapacityEth: null,
+    },
     slotPricePerEth: null,
     askPerEth: null,
     intel: null,
@@ -81,7 +88,25 @@ export type Action =
   /** Ground truth from the hook: reserves + written ask. */
   | { type: "POOL_SYNC"; pool: NonNullable<WorldState["pool"]>; slotPricePerEth: number }
   /** ERC-1155 slot balance of the connected wallet for the CURRENT epoch. */
-  | { type: "WALLET_SLOT_SYNC"; capacity: number };
+  | { type: "WALLET_SLOT_SYNC"; capacity: number }
+  /** LP module availability probe result. */
+  | { type: "LP_AVAILABLE"; available: boolean }
+  /** LP position + protocol constants, all from contract reads. */
+  | {
+      type: "LP_SYNC";
+      position: {
+        depositedEth: number;
+        shares: number;
+        claimableRevenueEth: number;
+        claimableSwapFeesUsdc: number;
+        withdrawableEth: number;
+      };
+      swapFeeBps: number;
+      slotRevenueShareBps: number;
+      soldCapacityEth: number;
+    }
+  /** A slot sale landed — the LP revenue feed. */
+  | { type: "LP_SALE"; sizeEth: number; pricePaidEth: number; buyer: string };
 
 /** Quote output of swapping sizeEth into the ACTIVE side only (constant product). */
 export function quoteSwapOutUsdc(
@@ -315,6 +340,92 @@ export function reducer(state: WorldState, action: Action): WorldState {
     case "DEPLOYMENT_LOADED":
     case "POOL_SYNC": {
       return { ...state, pool: action.pool, slotPricePerEth: action.slotPricePerEth };
+    }
+
+    case "LP_AVAILABLE": {
+      return { ...state, lp: { ...state.lp, available: action.available } };
+    }
+
+    case "LP_SYNC": {
+      return {
+        ...state,
+        lp: {
+          ...state.lp,
+          available: true,
+          position: {
+            depositedEth: action.position.depositedEth,
+            shares: action.position.shares,
+            claimableRevenueEth: action.position.claimableRevenueEth,
+            claimableSwapFeesUsdc: action.position.claimableSwapFeesUsdc,
+            withdrawableEth: action.position.withdrawableEth,
+          },
+          swapFeeBps: action.swapFeeBps,
+          slotRevenueShareBps: action.slotRevenueShareBps,
+          soldCapacityEth: action.soldCapacityEth,
+        },
+      };
+    }
+
+    case "LP_SALE": {
+      return {
+        ...state,
+        graph: [
+          {
+            id: takeEventId(),
+            kind: "mint" as const,
+            epochId: state.chain.epochId ?? 0,
+            blockNumber: state.chain.blockNumber ?? 0,
+            size: action.sizeEth,
+            pricePaid: action.pricePaidEth,
+            trader: action.buyer,
+            ts: Date.now(),
+          },
+          ...state.graph,
+        ],
+      };
+    }
+
+    case "LP_AVAILABLE": {
+      return { ...state, lp: { ...state.lp, available: action.available } };
+    }
+
+    case "LP_SYNC": {
+      return {
+        ...state,
+        lp: {
+          ...state.lp,
+          available: true,
+          position: {
+            depositedEth: action.position.depositedEth,
+            shares: action.position.shares,
+            claimableRevenueEth: action.position.claimableRevenueEth,
+            claimableSwapFeesUsdc: action.position.claimableSwapFeesUsdc,
+            withdrawableEth: action.position.withdrawableEth,
+          },
+          swapFeeBps: action.swapFeeBps,
+          slotRevenueShareBps: action.slotRevenueShareBps,
+          soldCapacityEth: action.soldCapacityEth,
+        },
+      };
+    }
+
+    case "LP_SALE": {
+      return {
+        ...state,
+        graph: [
+          {
+            id: takeEventId(),
+            kind: "mint" as const,
+            epochId: state.chain.epochId ?? 0,
+            blockNumber: state.chain.blockNumber ?? 0,
+            size: action.sizeEth,
+            pricePaid: action.pricePaidEth,
+            trader: action.buyer,
+            ts: Date.now(),
+          },
+          ...state.graph,
+        ],
+      };
     }
 
     case "WALLET_SLOT_SYNC": {

@@ -17,7 +17,15 @@ import type { IntelQuote, RejectReason, WorldState } from "./types";
 import { REJECT_REASONS } from "./types";
 import { useInjectedWallet } from "@/lib/wallet/use-injected-wallet";
 import { useChainState } from "./chain";
-import { loadDeployment, slotsAbi, hookAbi, routerAbi, poolKey, type CadenceDeployment } from "./abis";
+import {
+  loadDeployment,
+  slotsAbi,
+  hookAbi,
+  routerAbi,
+  lpModuleAbi,
+  poolKey,
+  type CadenceDeployment,
+} from "./abis";
 import { decodeWrappedInner, publicClientFor, walletClientFor, REVERT_SELECTORS } from "./contract";
 
 const StateContext = createContext<WorldState | null>(null);
@@ -30,6 +38,8 @@ const ActionsContext = createContext<{
   ) => Promise<"filled" | RejectReason>;
   attemptBadReveal: (sizeEth: number) => Promise<"filled" | RejectReason>;
   refreshIntel: () => Promise<boolean>;
+  depositLpEth: (sizeEth: number) => Promise<void>;
+  withdrawLpEth: (sharesEth: number) => Promise<void>;
 } | null>(null);
 
 interface CommitmentLocal {
@@ -57,7 +67,9 @@ function rejectFromRevert(data: string | undefined): { reason: RejectReason; det
           ? "same-block-passive-unlock"
           : mapped === "bad-reveal"
             ? "bad-reveal"
-            : ("no-slot" as RejectReason);
+            : mapped === "unsafe-withdraw"
+              ? "unsafe-withdraw"
+              : ("no-slot" as RejectReason);
   const extra: Record<string, string> = {
     "oversize-active": "Trade size exceeds the epoch's ACTIVE reserves.",
     "insufficient-escrow": "Commitment escrow is below the mint cost for the revealed size.",
@@ -209,6 +221,73 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       alive = false;
     };
   }, [chain.blockNumber, wallet.address, deploymentReady]);
+
+  // ------------------------------------------------------------------
+  // LP module: probe availability, then read position + constants.
+  // When the deployed hook predates the LP module, reads revert and the
+  // dashboard shows its honest "waiting for LP module" state.
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const d = deploymentRef.current;
+    const pc = publicRef.current;
+    if (!d || !pc) return;
+    let alive = true;
+    (async () => {
+      try {
+        await pc.readContract({
+          address: d.hook,
+          abi: lpModuleAbi,
+          functionName: "sharesOf",
+          args: ["0x0000000000000000000000000000000000000001" as `0x${string}`],
+        });
+        if (!alive) return;
+        dispatch({ type: "LP_AVAILABLE", available: true });
+      } catch {
+        if (!alive) return;
+        dispatch({ type: "LP_AVAILABLE", available: false });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [chain.chainId, deploymentReady]);
+
+  useEffect(() => {
+    const d = deploymentRef.current;
+    const pc = publicRef.current;
+    if (!d || !pc || state.lp.available !== true) return;
+    let alive = true;
+    (async () => {
+      const lp = wallet.address ?? "0x0000000000000000000000000000000000000001";
+      try {
+        const [pos, feeBps, revBps, sold] = await Promise.all([
+          pc.readContract({ address: d.hook, abi: lpModuleAbi, functionName: "lpPosition", args: [lp as `0x${string}`] }) as Promise<[bigint, bigint, bigint, bigint, bigint]>,
+          pc.readContract({ address: d.hook, abi: lpModuleAbi, functionName: "swapFeeBps" }) as Promise<bigint>,
+          pc.readContract({ address: d.hook, abi: lpModuleAbi, functionName: "slotRevenueShareBps" }) as Promise<bigint>,
+          pc.readContract({ address: d.hook, abi: lpModuleAbi, functionName: "soldCapacityEth" }) as Promise<bigint>,
+        ]);
+        if (!alive) return;
+        dispatch({
+          type: "LP_SYNC",
+          position: {
+            depositedEth: toEth(pos[0]),
+            shares: toEth(pos[1]),
+            claimableRevenueEth: toEth(pos[2]),
+            claimableSwapFeesUsdc: toEth(pos[3]),
+            withdrawableEth: toEth(pos[4]),
+          },
+          swapFeeBps: Number(feeBps),
+          slotRevenueShareBps: Number(revBps),
+          soldCapacityEth: toEth(sold),
+        });
+      } catch {
+        /* keep last known LP state */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [chain.blockNumber, wallet.address, state.lp.available]);
 
   const requireReady = useCallback((): {
     ok: boolean;
@@ -442,6 +521,53 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     [requireReady, sendTx],
   );
 
+  const depositLpEth = useCallback(
+    async (sizeEth: number) => {
+      const ctx = requireReady();
+      if (!ctx || stateRef.current.lp.available !== true) return;
+      const { pc, wc, d } = ctx;
+      await sendTx(
+        () =>
+          wc.writeContract({
+            address: d.hook,
+            abi: lpModuleAbi,
+            functionName: "depositEth",
+            args: [],
+            account: ctx.s.wallet.address as `0x${string}`,
+            chain: null,
+            value: parseUnits(String(sizeEth), 18),
+          }),
+        pc,
+        sizeEth,
+      );
+    },
+    [requireReady, sendTx],
+  );
+
+  const withdrawLpEth = useCallback(
+    async (sharesEth: number) => {
+      const ctx = requireReady();
+      if (!ctx || stateRef.current.lp.available !== true) return;
+      const { pc, wc, d } = ctx;
+      // the CONTRACT enforces withdraw safety — an unsafe amount reverts
+      // with UnsafeWithdraw() and lands in the reject log
+      await sendTx(
+        () =>
+          wc.writeContract({
+            address: d.hook,
+            abi: lpModuleAbi,
+            functionName: "withdrawEth",
+            args: [parseUnits(String(sharesEth), 18)],
+            account: ctx.s.wallet.address as `0x${string}`,
+            chain: null,
+          }),
+        pc,
+        sharesEth,
+      );
+    },
+    [requireReady, sendTx],
+  );
+
   const refreshIntel = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch("/api/intel", { method: "GET" });
@@ -471,8 +597,16 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const actions = useMemo(
-    () => ({ buySlot, commitMint, attemptSwap, attemptBadReveal, refreshIntel }),
-    [buySlot, commitMint, attemptSwap, attemptBadReveal, refreshIntel],
+    () => ({
+      buySlot,
+      commitMint,
+      attemptSwap,
+      attemptBadReveal,
+      refreshIntel,
+      depositLpEth,
+      withdrawLpEth,
+    }),
+    [buySlot, commitMint, attemptSwap, attemptBadReveal, refreshIntel, depositLpEth, withdrawLpEth],
   );
 
   return (

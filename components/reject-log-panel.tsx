@@ -13,6 +13,7 @@ const REASON_STYLE: Record<RejectReason, string> = {
   oversize: "border-danger/50 text-danger",
   "same-block-passive-unlock": "border-info/50 text-info",
   "bad-reveal": "border-danger/50 text-danger",
+  "unsafe-withdraw": "border-danger/50 text-danger",
 };
 
 export function RejectLogPanel({ className = "" }: { className?: string }) {

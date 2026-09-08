@@ -82,6 +82,37 @@ export const usdcAbi = [
   { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint8" }] },
 ] as const;
 
+/**
+ * LP module — the accounting surface the Cadence hook will implement
+ * (deposit → capacity → slot-sale revenue → withdraw with safety bounds).
+ * The /lp dashboard reads and writes against this ABI today and shows
+ * honest "waiting for LP module" states until the backend lands.
+ *
+ * Backend contract (must match for the UI to light up):
+ *   depositEth() payable                                   0x439370b1
+ *   withdrawEth(uint256 shares)                            reverts UnsafeWithdraw() 0x067a3d2e
+ *   sharesOf(address) view → uint256
+ *   lpPosition(address) view → (depositedEth, shares, claimableRevenueEth, claimableSwapFeesUsdc, withdrawableEth)
+ *   swapFeeBps() view → uint256
+ *   slotRevenueShareBps() view → uint256
+ *   soldCapacityEth() view → uint256   // sold + committed capacity this epoch
+ * Events: LPDeposited(lp, ethIn, shares) · LPWithdrawn(lp, shares, ethOut)
+ *         SlotRevenueAccrued(epochId, proceeds) · SwapFeeAccrued(epochId, feeUsdc)
+ */
+export const lpModuleAbi = [
+  { type: "function", name: "depositEth", stateMutability: "payable", inputs: [], outputs: [{ name: "shares", type: "uint256" }] },
+  { type: "function", name: "withdrawEth", stateMutability: "nonpayable", inputs: [{ name: "shares", type: "uint256" }], outputs: [{ name: "ethOut", type: "uint256" }] },
+  { type: "function", name: "sharesOf", stateMutability: "view", inputs: [{ name: "", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "lpPosition", stateMutability: "view", inputs: [{ name: "", type: "address" }], outputs: [{ name: "depositedEth", type: "uint256" }, { name: "shares", type: "uint256" }, { name: "claimableRevenueEth", type: "uint256" }, { name: "claimableSwapFeesUsdc", type: "uint256" }, { name: "withdrawableEth", type: "uint256" }] },
+  { type: "function", name: "swapFeeBps", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "slotRevenueShareBps", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "soldCapacityEth", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "event", name: "LPDeposited", inputs: [{ name: "lp", type: "address", indexed: true }, { name: "ethIn", type: "uint256", indexed: false }, { name: "shares", type: "uint256", indexed: false }] },
+  { type: "event", name: "LPWithdrawn", inputs: [{ name: "lp", type: "address", indexed: true }, { name: "shares", type: "uint256", indexed: false }, { name: "ethOut", type: "uint256", indexed: false }] },
+  { type: "event", name: "SlotRevenueAccrued", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "proceeds", type: "uint256", indexed: false }] },
+  { type: "event", name: "SwapFeeAccrued", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "feeUsdc", type: "uint256", indexed: false }] },
+] as const;
+
 /** PoolKey struct type for viem writes. */
 export function poolKey(d: CadenceDeployment) {
   return {

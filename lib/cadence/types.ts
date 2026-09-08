@@ -2,7 +2,8 @@ export type RejectReason =
   | "no-slot"
   | "oversize"
   | "same-block-passive-unlock"
-  | "bad-reveal";
+  | "bad-reveal"
+  | "unsafe-withdraw";
 
 export interface RejectReasonMeta {
   code: RejectReason;
@@ -33,6 +34,12 @@ export const REJECT_REASONS: Record<RejectReason, RejectReasonMeta> = {
     title: "Bad reveal",
     detail:
       "beforeSwap reverted: reveal(size, salt) does not hash to the committed H.",
+  },
+  "unsafe-withdraw": {
+    code: "unsafe-withdraw",
+    title: "Unsafe withdraw",
+    detail:
+      "withdraw reverted: it would orphan active capacity already sold this epoch.",
   },
 };
 
@@ -104,6 +111,33 @@ export interface Wallet {
   slot: { epochId: number; capacity: number; commitmentId?: number } | null;
 }
 
+/** LP position — all values are contract reads (null until the LP module
+ *  is deployed on the target chain). */
+export interface LpPosition {
+  /** ETH the LP deposited, per the contract */
+  depositedEth: number | null;
+  /** share units — equity in the pool, NOT cadence-slot capacity */
+  shares: number | null;
+  /** claimable slot-sale revenue, in ETH (≠ swap fees) */
+  claimableRevenueEth: number | null;
+  /** claimable swap fees, in USDC (≠ slot revenue) */
+  claimableSwapFeesUsdc: number | null;
+  /** withdrawable ETH under active/passive safety bounds */
+  withdrawableEth: number | null;
+}
+
+export interface LpState {
+  /** true when the deployed hook answers LP-module reads; false = honest
+   *  "waiting for LP module" state; null = probe pending */
+  available: boolean | null;
+  position: LpPosition | null;
+  /** protocol constants from the contract (defaults shown while unwired) */
+  swapFeeBps: number | null;
+  slotRevenueShareBps: number | null;
+  /** capacity sold (minted + committed) this epoch, in ETH */
+  soldCapacityEth: number | null;
+}
+
 /** Live chain state — read from a real RPC, never simulated. */
 export interface ChainState {
   chainId: number | null;
@@ -143,6 +177,8 @@ export interface WorldState {
   /** live pool state from the cadence hook — null until contracts are connected */
   pool: PoolState | null;
   wallet: Wallet;
+  /** LP module state — null fields until the LP module is on-chain */
+  lp: LpState;
   /** slot ask written by paid intel — null until a real intel call lands */
   slotPricePerEth: number | null;
   askPerEth: number | null;

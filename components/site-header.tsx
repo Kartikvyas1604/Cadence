@@ -7,6 +7,7 @@ import { WalletButton } from "./wallet-button";
 
 const NAV = [
   { href: "/protocol", label: "Protocol" },
+  { href: "/lp", label: "LP" },
   { href: "/console", label: "Console" },
   { href: "/graph", label: "Graph" },
   { href: "/intel", label: "Intel" },

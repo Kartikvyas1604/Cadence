@@ -1,7 +1,13 @@
 import Link from "next/link";
-import { ArrowRight, LineChart, RadioTower, ShieldBan, Terminal } from "lucide-react";
+import { ArrowRight, LineChart, RadioTower, ShieldBan, Terminal, Wallet } from "lucide-react";
 
 const PAGES = [
+  {
+    href: "/lp",
+    icon: Wallet,
+    title: "LP desk",
+    body: "Deposit liquidity, sell this epoch's capacity, earn slot revenue — bounded withdrawals.",
+  },
   {
     href: "/console",
     icon: Terminal,
@@ -33,7 +39,7 @@ export function HomeLinks() {
     <section className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-20 lg:px-8">
       <div className="flex items-end justify-between gap-4">
         <h2 className="font-serif text-3xl tracking-tight text-foreground md:text-4xl">
-          Four rooms, one venue
+          Five rooms, one venue
         </h2>
         <Link
           href="/console"
@@ -43,7 +49,7 @@ export function HomeLinks() {
         </Link>
       </div>
 
-      <ul className="mt-8 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+      <ul className="mt-8 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-5">
         {PAGES.map((p) => (
           <li key={p.href} className="bg-surface">
             <Link

@@ -18,7 +18,7 @@ export function publicClientFor(_chainId: number): PublicClient {
 }
 
 /** Wrap the injected EIP-1193 provider as a viem wallet client. */
-export function walletClientFor(provider: unknown, chainId: number): WalletClient | null {
+export function walletClientFor(provider: unknown, _chainId: number): WalletClient | null {
   if (!provider) return null;
   try {
     return createWalletClient({ transport: custom(provider as never) });
@@ -49,6 +49,7 @@ export const REVERT_SELECTORS: Record<string, string> = {
   "0xefd222f9": "oversize-active", // OversizeVsActive()
   "0x5a1b39fc": "same-block-passive-unlock", // PassiveUnlock()
   "0x8ff14e0d": "bad-reveal", // BadReveal() (slots or hook)
+  "0x067a3d2e": "unsafe-withdraw", // UnsafeWithdraw()
   "0x90b8ab88": "insufficient-escrow", // InsufficientEscrow()
   "0x9ff41fe0": "capacity-exceeded", // CapacityExceeded()
   "0xc459d23f": "zero-size", // ZeroSize()
