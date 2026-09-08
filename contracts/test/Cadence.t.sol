@@ -50,7 +50,7 @@ contract CadenceTest is Test {
         // hook (which references both immutably) can be salt-mined for the
         // BEFORE_SWAP | BEFORE_SWAP_RETURNS_DELTA address flags.
         bytes memory codeSlots = abi.encodePacked(
-            type(CadenceSlots).creationCode, abi.encode(PRICE_PER_ETH, PRICE_PER_ETH * 2, "")
+            type(CadenceSlots).creationCode, abi.encode(PRICE_PER_ETH, PRICE_PER_ETH * 2, "", address(this))
         );
         bytes memory codeRouter =
             abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
@@ -71,7 +71,7 @@ contract CadenceTest is Test {
             if (uint160(hookAddr) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) break;
         }
 
-        slots = new CadenceSlots{salt: bytes32(uint256(11))}(PRICE_PER_ETH, PRICE_PER_ETH * 2, "");
+        slots = new CadenceSlots{salt: bytes32(uint256(11))}(PRICE_PER_ETH, PRICE_PER_ETH * 2, "", address(this));
         require(address(slots) == slotsAddr, "slots addr");
         router = new CadenceRouter{salt: bytes32(uint256(12))}(manager, address(usdc));
         require(address(router) == routerAddr, "router addr");

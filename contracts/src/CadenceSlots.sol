@@ -80,7 +80,12 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
     /// @notice H => commitment
     mapping(bytes32 H => Commitment) public commitments;
 
-    constructor(uint256 pricePerEth_, uint256 minEscrow_, string memory uri_) ERC1155(uri_) Ownable(msg.sender) {
+    /// @param owner_ the deploying admin (passed explicitly — salted CREATE2
+    ///         deploys construct from the factory, not the deployer EOA).
+    constructor(uint256 pricePerEth_, uint256 minEscrow_, string memory uri_, address owner_)
+        ERC1155(uri_)
+        Ownable(owner_)
+    {
         pricePerEth = pricePerEth_;
         minEscrow = minEscrow_;
     }
