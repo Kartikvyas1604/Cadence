@@ -33,6 +33,8 @@ contract CadenceTest is Test {
 
     uint256 constant LAMBDA_BPS = 2500; // 25% active
     uint256 constant EPOCH_LEN = 12;
+    uint256 constant SWAP_FEE_BPS = 30; // 0.30% on output
+    uint256 constant REVENUE_SHARE_BPS = 10_000; // 100% of slot sales to LPs
 
     uint256 constant SEED_ETH = 1000e18;
     uint256 constant SEED_USDC = 3_000_000e18; // 3000 USDC per ETH
@@ -70,7 +72,9 @@ contract CadenceTest is Test {
             )
         );
 
-        bytes memory args = abi.encode(manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN);
+        bytes memory args = abi.encode(
+            manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN, SWAP_FEE_BPS, REVENUE_SHARE_BPS
+        );
         bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
         bytes32 salt;
         address hookAddr;
@@ -86,7 +90,9 @@ contract CadenceTest is Test {
         require(address(slots) == slotsAddr, "slots addr");
         router = new CadenceRouter{salt: bytes32(uint256(12))}(manager, address(usdc));
         require(address(router) == routerAddr, "router addr");
-        hook = new CadenceHook{salt: salt}(manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN);
+        hook = new CadenceHook{salt: salt}(
+            manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN, SWAP_FEE_BPS, REVENUE_SHARE_BPS
+        );
         require(address(hook) == hookAddr, "hook addr");
 
         slots.setHook(address(hook));
@@ -300,9 +306,10 @@ contract CadenceTest is Test {
         vm.roll(block.number + EPOCH_LEN);
         hook.refreshEpoch();
 
-        // active = lambda * total; total includes swap inflows (reserves are
-        // raw hook balances: +size ETH swapped in)
-        assertEq(hook.activeEth(), ((SEED_ETH + size) * LAMBDA_BPS) / 10_000);
+        // active = lambda * total; total includes swap inflows (+size) AND
+        // slot-sale proceeds forwarded to the hook (+size * price)
+        uint256 proceeds = (size * PRICE_PER_ETH) / 1e18;
+        assertEq(hook.activeEth(), ((SEED_ETH + size + proceeds) * LAMBDA_BPS) / 10_000);
     }
 
     function test_seedCannotRepartitionAfterConsumption() public {

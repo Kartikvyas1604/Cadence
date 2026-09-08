@@ -61,6 +61,8 @@ export function initialWorld(): WorldState {
       swapFeeBps: null,
       slotRevenueShareBps: null,
       soldCapacityEth: null,
+      budgetEth: null,
+      remainingCapacity: null,
     },
     slotPricePerEth: null,
     askPerEth: null,
@@ -104,6 +106,8 @@ export type Action =
       swapFeeBps: number;
       slotRevenueShareBps: number;
       soldCapacityEth: number;
+      budgetEth: number;
+      remainingCapacity: number;
     }
   /** A slot sale landed — the LP revenue feed. */
   | { type: "LP_SALE"; sizeEth: number; pricePaidEth: number; buyer: string };
@@ -362,6 +366,8 @@ export function reducer(state: WorldState, action: Action): WorldState {
           swapFeeBps: action.swapFeeBps,
           slotRevenueShareBps: action.slotRevenueShareBps,
           soldCapacityEth: action.soldCapacityEth,
+          budgetEth: action.budgetEth,
+          remainingCapacity: action.remainingCapacity,
         },
       };
     }
@@ -405,6 +411,8 @@ export function reducer(state: WorldState, action: Action): WorldState {
           swapFeeBps: action.swapFeeBps,
           slotRevenueShareBps: action.slotRevenueShareBps,
           soldCapacityEth: action.soldCapacityEth,
+          budgetEth: action.budgetEth,
+          remainingCapacity: action.remainingCapacity,
         },
       };
     }

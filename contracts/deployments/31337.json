@@ -1,11 +1,13 @@
 {
   "epochLengthBlocks": 120,
-  "hook": "0x635077a075FF49Abb2478703d7d059C469c50088",
+  "hook": "0x8268Aa6b251Cd00D810fF3eBC2AC647403Ff4088",
   "lambdaBps": 2500,
   "poolManager": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   "pricePerEth": 1000000000000000,
   "router": "0xfe3aAFe1b43Cf857Cc1aC3d16edcC6DE07499B6b",
   "seedBlock": 0,
-  "slots": "0x5899BF157B79B4EA6c2102dBdc9C9022B48Ef944",
+  "slotRevenueShareBps": 10000,
+  "slots": "0xec60dC674d9Ab05b1Cd27F7E13ad524415cD5F04",
+  "swapFeeBps": 30,
   "usdc": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
 }

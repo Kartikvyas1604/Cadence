@@ -11,6 +11,7 @@ import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 import {SafeCast} from "@uniswap/v4-core/src/libraries/SafeCast.sol";
 import {IERC20Minimal} from "@uniswap/v4-core/src/interfaces/external/IERC20Minimal.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 /**
  * @title CadenceHook
@@ -38,6 +39,7 @@ contract CadenceHook is IHooks {
     using Hooks for IHooks;
     using CurrencySettler for Currency;
     using SafeCast for uint256;
+    using Address for address payable;
 
     // ------------------------------------------------------------------
     // Errors (reject paths)
@@ -63,6 +65,9 @@ contract CadenceHook is IHooks {
     error ZeroSwap();
     /// @notice Caller is not the PoolManager.
     error NotPoolManager();
+    /// @notice Withdraw would orphan active capacity already sold this epoch,
+    ///  or exceed the LP's deposited value (spec safety bounds).
+    error UnsafeWithdraw();
 
     event CadenceSwap(
         uint256 indexed epochId,
@@ -75,6 +80,14 @@ contract CadenceHook is IHooks {
     event EpochRefreshed(
         uint256 indexed epochId, uint256 activeEth, uint256 activeUsdc, uint256 passiveEth, uint256 passiveUsdc
     );
+    event EpochCapacitySet(uint256 indexed epochId, uint256 activeBudget, uint256 passiveReserve);
+    event CapacityExpired(uint256 indexed epochId, uint256 expiredCapacity);
+
+    event LPDeposited(address indexed lp, uint256 ethIn, uint256 shares);
+    event LPWithdrawn(address indexed lp, uint256 shares, uint256 ethOut);
+    event SlotRevenueAccrued(uint256 indexed epochId, uint256 proceeds);
+    event RevenueClaimed(address indexed lp, uint256 amountEth);
+    event SwapFeeClaimed(address indexed lp, uint256 amountUsdc);
 
     // ------------------------------------------------------------------
     // Config
@@ -111,6 +124,34 @@ contract CadenceHook is IHooks {
     ///         blocks mid-epoch re-partitioning via seeds (passive-lock invariant).
     bool public consumedThisEpoch;
 
+    // ------------------------------------------------------------------
+    // LP accounting — A0. Slot ≠ share: shares are pool equity; slots are
+    // expiring capacity tickets. Slot-sale revenue and swap fees are two
+    // separate ledgers, both accrued pro-rata by shares.
+    // ------------------------------------------------------------------
+
+    uint256 public totalShares;
+    mapping(address lp => uint256) public sharesOf;
+    /// @notice Cumulative ETH deposited (gross) — caps withdrawal per spec.
+    mapping(address lp => uint256) public depositedEth;
+    /// @notice Cumulative ETH withdrawn.
+    mapping(address lp => uint256) public withdrawnEth;
+
+    /// @notice Slot-sale revenue per share, scaled 1e18 (ETH).
+    uint256 public revAccPerShare;
+    /// @notice Swap-fee per share, scaled 1e18 (USDC).
+    uint256 public feeAccPerShare;
+    mapping(address lp => uint256) public revCheckpoint;
+    mapping(address lp => uint256) public feeCheckpoint;
+    /// @notice Revenue owed but not yet payable (sold-capacity headroom was
+    ///  exhausted). Survives full withdrawal; pays out once headroom frees.
+    mapping(address lp => uint256) public strandedRev;
+
+    /// @notice Swap fee on the OUTPUT quote token, in bps (default 30 = 0.30%).
+    uint256 public swapFeeBps;
+    /// @notice Share of slot-sale proceeds paid to LPs, in bps (default 10000).
+    uint256 public slotRevenueShareBps;
+
     // no epoch has been refreshed yet (0 is a valid epoch id)
     uint256 private constant NEVER = type(uint256).max;
 
@@ -120,7 +161,9 @@ contract CadenceHook is IHooks {
         address slots_,
         address router_,
         uint256 lambdaBps_,
-        uint256 epochLengthBlocks_
+        uint256 epochLengthBlocks_,
+        uint256 swapFeeBps_,
+        uint256 slotRevenueShareBps_
     ) {
         manager = manager_;
         usdc = usdc_;
@@ -128,6 +171,8 @@ contract CadenceHook is IHooks {
         router = router_;
         lambdaBps = lambdaBps_;
         epochLengthBlocks = epochLengthBlocks_;
+        swapFeeBps = swapFeeBps_;
+        slotRevenueShareBps = slotRevenueShareBps_;
         lastRefreshedEpoch = type(uint256).max;
 
         Hooks.validateHookPermissions(this, getHookPermissions());
@@ -184,6 +229,147 @@ contract CadenceHook is IHooks {
     }
 
     // ------------------------------------------------------------------
+    // LP module — A0: deposit / withdraw / revenue / swap fees
+    // ------------------------------------------------------------------
+
+    /// @notice Deposit ETH for pool shares. Shares are equity — NOT cadence
+    ///         slots. Re-partitions the λ split only while the epoch's active
+    ///         depth is untouched (same rule as seeding).
+    function depositEth() external payable returns (uint256 minted) {
+        if (msg.value == 0) revert ZeroSwap();
+        _refreshEpoch();
+
+        uint256 balanceBefore = address(this).balance - msg.value;
+        if (totalShares == 0 || balanceBefore == 0) {
+            minted = msg.value;
+        } else {
+            minted = (msg.value * totalShares) / balanceBefore;
+        }
+        sharesOf[msg.sender] += minted;
+        totalShares += minted;
+        depositedEth[msg.sender] += msg.value;
+        // new shares only earn revenue/fees from here on
+        revCheckpoint[msg.sender] = revAccPerShare;
+        feeCheckpoint[msg.sender] = feeAccPerShare;
+
+        if (!consumedThisEpoch) _repartition();
+        emit LPDeposited(msg.sender, msg.value, minted);
+    }
+
+    /// @notice Burn shares and withdraw ETH within spec safety bounds:
+    ///         ethOut = shares * (eligible - soldCapacity) / totalShares,
+    ///         capped by the LP's still-unwithdrawn deposit value. Accrued
+    ///         slot revenue and swap fees are paid out in the same call.
+    function withdrawEth(uint256 shares_) external returns (uint256 ethOut) {
+        if (shares_ == 0) revert ZeroSwap();
+        uint256 bal = sharesOf[msg.sender];
+        if (shares_ > bal) revert UnsafeWithdraw();
+
+        _refreshEpoch();
+        uint256 safe = address(this).balance - _soldCapacityEth();
+        ethOut = (shares_ * safe) / totalShares;
+
+        // min(deposited - withdrawn, pro-rata of safe liquidity)
+        uint256 maxByDeposit = depositedEth[msg.sender] - withdrawnEth[msg.sender];
+        if (ethOut > maxByDeposit) revert UnsafeWithdraw();
+
+        // settle both ledgers FIRST — claims must compute on pre-burn shares
+        uint256 rev = _claimableRevenue(msg.sender);
+        uint256 fee = _claimableSwapFee(msg.sender);
+
+        // the revenue payout must never eat sold-capacity backing: cap at
+        // (balance - ethOut - sold); unpaid remainder parks in strandedRev
+        // so a full withdrawal never strands the claim
+        uint256 headroom = address(this).balance - ethOut - _soldCapacityEth();
+        uint256 pendingTotal = rev;
+        rev = rev <= headroom ? rev : headroom;
+        revCheckpoint[msg.sender] = revAccPerShare;
+        feeCheckpoint[msg.sender] = feeAccPerShare;
+        strandedRev[msg.sender] = pendingTotal - rev;
+
+        sharesOf[msg.sender] = bal - shares_;
+        totalShares -= shares_;
+        withdrawnEth[msg.sender] += ethOut;
+
+        Address.sendValue(payable(msg.sender), ethOut + rev);
+        if (fee > 0) IERC20Minimal(usdc).transfer(msg.sender, fee);
+
+        emit LPWithdrawn(msg.sender, shares_, ethOut);
+        if (rev > 0) emit RevenueClaimed(msg.sender, rev);
+        if (fee > 0) emit SwapFeeClaimed(msg.sender, fee);
+    }
+
+    /// @notice Claim accrued slot-sale revenue (ETH) only.
+    function claimSlotRevenue() external returns (uint256 amount) {
+        uint256 pending = _claimableRevenue(msg.sender);
+        if (pending == 0) revert ZeroSwap();
+        // never eat sold-capacity backing; the remainder stays claimable
+        uint256 headroom = address(this).balance - _soldCapacityEth();
+        amount = pending <= headroom ? pending : headroom;
+        revCheckpoint[msg.sender] = revAccPerShare;
+        strandedRev[msg.sender] = pending - amount;
+        Address.sendValue(payable(msg.sender), amount);
+        emit RevenueClaimed(msg.sender, amount);
+    }
+
+    /// @notice Claim accrued swap fees (USDC) only.
+    function claimSwapFees() external returns (uint256 amount) {
+        amount = _claimableSwapFee(msg.sender);
+        if (amount == 0) revert ZeroSwap();
+        feeCheckpoint[msg.sender] = feeAccPerShare;
+        IERC20Minimal(usdc).transfer(msg.sender, amount);
+        emit SwapFeeClaimed(msg.sender, amount);
+    }
+
+    /// @notice Slot-sale proceeds forwarded by CadenceSlots on mint/reveal.
+    function _accrueSlotRevenue(uint256 proceeds) internal {
+        if (totalShares > 0 && proceeds > 0) {
+            revAccPerShare += (proceeds * slotRevenueShareBps * 1e18) / totalShares / 10_000;
+        }
+        emit SlotRevenueAccrued(currentEpoch(), proceeds);
+    }
+
+    function _claimableRevenue(address lp) internal view returns (uint256) {
+        return ((revAccPerShare - revCheckpoint[lp]) * sharesOf[lp]) / 1e18 + strandedRev[lp];
+    }
+
+    function _claimableSwapFee(address lp) internal view returns (uint256) {
+        return ((feeAccPerShare - feeCheckpoint[lp]) * sharesOf[lp]) / 1e18;
+    }
+
+    /// @notice Capacity sold this epoch (public mints + live commitments), ETH.
+    function soldCapacityEth() public view returns (uint256) {
+        return _soldCapacityEth();
+    }
+
+    function _soldCapacityEth() internal view returns (uint256) {
+        uint256 epochId = currentEpoch();
+        return CadenceSlotsLike(slots).mintedCapacity(epochId) + CadenceSlotsLike(slots).committedCapacity(epochId);
+    }
+
+    /// @notice Full LP position for the dashboard: deposited, shares, claimable
+    ///         slot revenue (ETH), claimable swap fees (USDC), withdrawable ETH.
+    function lpPosition(address lp)
+        external
+        view
+        returns (
+            uint256 deposited,
+            uint256 shares,
+            uint256 claimableRevenueEth,
+            uint256 claimableSwapFeesUsdc,
+            uint256 withdrawable
+        )
+    {
+        deposited = depositedEth[lp] - withdrawnEth[lp];
+        shares = sharesOf[lp];
+        claimableRevenueEth = _claimableRevenue(lp);
+        claimableSwapFeesUsdc = _claimableSwapFee(lp);
+        uint256 safe = address(this).balance - _soldCapacityEth();
+        uint256 proRata = totalShares > 0 ? (shares * safe) / totalShares : 0;
+        withdrawable = proRata < deposited ? proRata : deposited;
+    }
+
+    // ------------------------------------------------------------------
     // Epoch refresh — A: unlock/refresh, expire prior capacity
     // ------------------------------------------------------------------
 
@@ -221,9 +407,12 @@ contract CadenceHook is IHooks {
         passiveUsdc = totalUsdc - activeUsdc;
 
         // epoch capacity budget for Cadence slots = active ETH depth
+        uint256 expired = epochCapacityEth[epochId] > 0 ? epochCapacityEth[epochId] - _soldCapacityEth() : 0;
         epochCapacityEth[epochId] = activeEth;
 
         emit EpochRefreshed(epochId, activeEth, activeUsdc, passiveEth, passiveUsdc);
+        emit EpochCapacitySet(epochId, activeEth, passiveEth);
+        if (expired > 0) emit CapacityExpired(epochId, expired);
     }
 
     // ------------------------------------------------------------------
@@ -334,18 +523,26 @@ contract CadenceHook is IHooks {
             activeEth -= out;
         }
 
+        // swap fee — a SEPARATE ledger from slot-sale revenue: 0.30% of the
+        // output stays with the hook and accrues to LPs pro-rata by shares.
+        uint256 fee = (out * swapFeeBps) / 10_000;
+        if (fee > 0 && totalShares > 0) {
+            feeAccPerShare += (fee * 1e18) / totalShares;
+        } else {
+            fee = 0;
+        }
+
         // settle the custom delta: pull input from the manager (the router
         // paid it in before swap), push output into the manager for the
-        // router to deliver. Pool swap is no-oped (hook delta specified
-        // cancels amountToSwap; the pool has zero liquidity).
+        // router to deliver (net of the LP swap fee). Pool swap is no-oped.
         inputC.take(manager, address(this), size, false);
-        outputC.settle(manager, address(this), out, false);
+        outputC.settle(manager, address(this), out - fee, false);
 
         // hook delta: +size specified (hook owed input), -out unspecified
         // (hook owes output). Swapper nets (-size, +out) after Hooks.afterSwap.
         // (int128 casts are safe: size is bounded below.)
         require(size < 2 ** 127, "CadenceHook: size overflow");
-        BeforeSwapDelta hookDelta = toBeforeSwapDelta(int128(uint128(size)), -int128(int256(out)));
+        BeforeSwapDelta hookDelta = toBeforeSwapDelta(int128(uint128(size)), -int128(int256(out - fee)));
 
         emit CadenceSwap(currentEpoch(), trader, zeroForOne, sizeInEth, out, fromCommitment);
         return hookDelta;
@@ -448,18 +645,25 @@ contract CadenceHook is IHooks {
         (aEth, aUsdc, pEth, pUsdc) = (activeEth, activeUsdc, passiveEth, passiveUsdc);
     }
 
+    /// @notice Net quote: active-only constant product minus the LP swap fee.
+    ///         The fee waives while there are no LPs (nothing to accrue to).
     function quoteOutUsdc(uint256 sizeEth) external view returns (uint256) {
-        return _quoteOut(activeEth, activeUsdc, sizeEth);
+        uint256 gross = _quoteOut(activeEth, activeUsdc, sizeEth);
+        return totalShares > 0 ? gross - (gross * swapFeeBps) / 10_000 : gross;
     }
 
     /// @notice The hook custodies raw reserves (seeds and swap inflows land
     ///         here); native ETH enters via manager.take during swaps and
-    ///         via seedEth.
-    receive() external payable {}
+    ///         via seedEth. ETH from CadenceSlots is slot-sale revenue.
+    receive() external payable {
+        if (msg.sender == slots) _accrueSlotRevenue(msg.value);
+    }
 }
 
 interface CadenceSlotsLike {
     function slotOf(address owner) external view returns (uint256);
     function consume(address trader, uint256 size) external;
     function revealAndConsume(address trader, uint256 size, bytes32 salt) external returns (uint256);
+    function mintedCapacity(uint256 epochId) external view returns (uint256);
+    function committedCapacity(uint256 epochId) external view returns (uint256);
 }

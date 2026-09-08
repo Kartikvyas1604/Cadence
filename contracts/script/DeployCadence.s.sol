@@ -44,6 +44,8 @@ contract DeployCadence is Script {
         uint256 pricePerEth;
         uint256 seedEthAmt;
         uint256 seedUsdcAmt;
+        uint256 swapFeeBps;
+        uint256 slotRevenueShareBps;
     }
 
     struct WireCtx {
@@ -67,7 +69,9 @@ contract DeployCadence is Script {
             epochLen: uint256(vm.envOr("EPOCH_LENGTH", uint256(EPOCH_DEFAULT))),
             pricePerEth: uint256(vm.envOr("SLOT_PRICE_ETH", PRICE_DEFAULT)),
             seedEthAmt: uint256(vm.envOr("SEED_ETH", bytes32(uint256(1000e18)))),
-            seedUsdcAmt: uint256(vm.envOr("SEED_USDC", bytes32(uint256(3_000_000e18))))
+            seedUsdcAmt: uint256(vm.envOr("SEED_USDC", bytes32(uint256(3_000_000e18)))),
+            swapFeeBps: uint256(vm.envOr("SWAP_FEE_BPS", uint256(30))),
+            slotRevenueShareBps: uint256(vm.envOr("SLOT_REVENUE_SHARE_BPS", uint256(10_000)))
         });
 
         vm.startBroadcast(pk);
@@ -133,7 +137,10 @@ contract DeployCadence is Script {
         DeployParams memory p
     ) internal view returns (bytes memory) {
         return abi.encodePacked(
-            type(CadenceHook).creationCode, abi.encode(manager, usdcAddr, slotsAddr, routerAddr, p.lambda, p.epochLen)
+            type(CadenceHook).creationCode,
+            abi.encode(
+                manager, usdcAddr, slotsAddr, routerAddr, p.lambda, p.epochLen, p.swapFeeBps, p.slotRevenueShareBps
+            )
         );
     }
 
@@ -153,8 +160,16 @@ contract DeployCadence is Script {
     }
 
     function _finishWire(WireCtx memory ctx, bytes32 saltHook) internal {
-        CadenceHook hook =
-            new CadenceHook{salt: saltHook}(ctx.manager, ctx.usdc, ctx.slots, ctx.router, ctx.p.lambda, ctx.p.epochLen);
+        CadenceHook hook = new CadenceHook{salt: saltHook}(
+            ctx.manager,
+            ctx.usdc,
+            ctx.slots,
+            ctx.router,
+            ctx.p.lambda,
+            ctx.p.epochLen,
+            ctx.p.swapFeeBps,
+            ctx.p.slotRevenueShareBps
+        );
         require(address(hook) == ctx.hook, "hook addr drift");
         console2.log("deployed hook", address(hook));
 
@@ -169,12 +184,13 @@ contract DeployCadence is Script {
         });
         ctx.manager.initialize(key, TickMath.getSqrtPriceAtTick(0));
 
-        // seed the PA-AMM reserves (active = lambda * total)
+        // bootstrap: quote-token seed (protocol-owned) + the deployer as the
+        // first LP via depositEth (shares + slot-revenue rights)
         uint256 deployerUsdc = MockUSDC(ctx.usdc).balanceOf(ctx.deployer);
         require(deployerUsdc >= ctx.p.seedUsdcAmt, "deployer needs USDC");
         MockUSDC(ctx.usdc).approve(address(hook), ctx.p.seedUsdcAmt);
-        hook.seedEth{value: ctx.p.seedEthAmt}();
         hook.seedUsdc(ctx.p.seedUsdcAmt);
+        hook.depositEth{value: ctx.p.seedEthAmt}();
 
         _writeDeployment(ctx, address(hook));
     }
@@ -190,6 +206,8 @@ contract DeployCadence is Script {
         vm.serializeUint(json, "lambdaBps", ctx.p.lambda);
         vm.serializeUint(json, "epochLengthBlocks", ctx.p.epochLen);
         vm.serializeUint(json, "pricePerEth", ctx.p.pricePerEth);
+        vm.serializeUint(json, "swapFeeBps", ctx.p.swapFeeBps);
+        vm.serializeUint(json, "slotRevenueShareBps", ctx.p.slotRevenueShareBps);
         string memory out = vm.serializeUint(json, "seedBlock", block.number);
         vm.writeJson(out, string.concat("deployments/", chainId, ".json"));
         console2.log("wrote deployments", string.concat("deployments/", chainId, ".json"));

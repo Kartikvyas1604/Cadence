@@ -136,6 +136,10 @@ export interface LpState {
   slotRevenueShareBps: number | null;
   /** capacity sold (minted + committed) this epoch, in ETH */
   soldCapacityEth: number | null;
+  /** this epoch's active capacity budget, in ETH (hook read) */
+  budgetEth: number | null;
+  /** remaining mintable capacity for this epoch (slots read) */
+  remainingCapacity: number | null;
 }
 
 /** Live chain state — read from a real RPC, never simulated. */

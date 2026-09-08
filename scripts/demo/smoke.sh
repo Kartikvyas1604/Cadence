@@ -83,5 +83,30 @@ OUT=$(cast send $R "sellEthPrivate((address,address,uint24,int24,address),uint25
 echo "$OUT" | grep -qE "0x8ff14e0d" || fail "bad reveal did not revert"
 echo "bad reveal rejected ok (0x8ff14e0d)"
 
+say "7. LP module: position, revenue, withdraw safety"
+# the deploy script deposited as the bootstrap LP (deployer = PK0)
+LP=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+echo "LP = $LP"
+SHARES=$(cast call $H "sharesOf(address)(uint256)" $LP --rpc-url $RPC | cut -d" " -f1)
+python3 -c "import sys; sys.exit(0 if int('$SHARES') > 0 else 1)" || fail "bootstrap LP has no shares"
+echo "bootstrap LP shares: $SHARES"
+
+# buy another slot: sale proceeds must accrue as LP revenue
+cast send $S "mintPublic(uint256)(uint256)" 4e18 --value 0.5e18 --private-key $PK1 --rpc-url $RPC > /dev/null
+REV=$(cast call $H "lpPosition(address)(uint256,uint256,uint256,uint256,uint256)" $LP --rpc-url $RPC | sed -n '3p' | cut -d" " -f1)
+python3 -c "import sys; sys.exit(0 if int('$REV') > 0 else 1)" || fail "slot-sale revenue did not accrue to the LP"
+echo "LP slot revenue accrued: $REV wei ETH"
+
+# swap: fee ledger accrues (USDC), separate from revenue
+cast send $R "swap((address,address,uint24,int24,address),bool,uint256)" "$KEY" true 1e18 --value 1e18 --private-key $PK1 --rpc-url $RPC 2>&1 | grep -q "success" || fail "post-LP swap failed"
+FEE=$(cast call $H "lpPosition(address)(uint256,uint256,uint256,uint256,uint256)" $LP --rpc-url $RPC | sed -n '4p' | cut -d" " -f1)
+python3 -c "import sys; sys.exit(0 if int('$FEE') > 0 else 1)" || fail "swap fee did not accrue to the LP"
+echo "LP swap fee accrued: $FEE wei USDC (separate ledger)"
+
+# withdraw way beyond the safety bound -> UnsafeWithdraw (0x067a3d2e)
+OUT=$(cast send $H "withdrawEth(uint256)" 999999e18 --private-key $PK0 --rpc-url $RPC 2>&1 || true)
+echo "$OUT" | grep -q "0x067a3d2e" || fail "unsafe withdraw did not revert with UnsafeWithdraw"
+echo "unsafe withdraw rejected ok (0x067a3d2e)"
+
 say "PASS — full demo path verified on-chain"
 kill $ANVIL_PID 2>/dev/null || true

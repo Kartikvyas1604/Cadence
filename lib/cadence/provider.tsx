@@ -260,11 +260,18 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const lp = wallet.address ?? "0x0000000000000000000000000000000000000001";
       try {
-        const [pos, feeBps, revBps, sold] = await Promise.all([
+        const epoch = (await pc.readContract({
+          address: d.hook,
+          abi: hookAbi,
+          functionName: "currentEpoch",
+        })) as bigint;
+        const [pos, feeBps, revBps, sold, budget, remaining] = await Promise.all([
           pc.readContract({ address: d.hook, abi: lpModuleAbi, functionName: "lpPosition", args: [lp as `0x${string}`] }) as Promise<[bigint, bigint, bigint, bigint, bigint]>,
           pc.readContract({ address: d.hook, abi: lpModuleAbi, functionName: "swapFeeBps" }) as Promise<bigint>,
           pc.readContract({ address: d.hook, abi: lpModuleAbi, functionName: "slotRevenueShareBps" }) as Promise<bigint>,
           pc.readContract({ address: d.hook, abi: lpModuleAbi, functionName: "soldCapacityEth" }) as Promise<bigint>,
+          pc.readContract({ address: d.hook, abi: hookAbi, functionName: "epochCapacityEth", args: [epoch] }) as Promise<bigint>,
+          pc.readContract({ address: d.slots, abi: slotsAbi, functionName: "remainingCapacity" }) as Promise<bigint>,
         ]);
         if (!alive) return;
         dispatch({
@@ -279,6 +286,8 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
           swapFeeBps: Number(feeBps),
           slotRevenueShareBps: Number(revBps),
           soldCapacityEth: toEth(sold),
+          budgetEth: toEth(budget),
+          remainingCapacity: toEth(remaining),
         });
       } catch {
         /* keep last known LP state */

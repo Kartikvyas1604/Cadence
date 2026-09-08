@@ -271,9 +271,9 @@ export function LpPositionCard({ className = "" }: { className?: string }) {
 /** This epoch's capacity budget: budget, sold, remaining, expiry. */
 export function LpCapacityPanel({ className = "" }: { className?: string }) {
   const s = useCadence();
-  const budget = s.pool ? null : null; // budget arrives with the LP module
+  const budget = s.lp.budgetEth;
   const sold = s.lp.soldCapacityEth;
-  const remaining = null; // remainingCapacity read lands with the LP module
+  const remaining = s.lp.remainingCapacity;
 
   return (
     <Panel
