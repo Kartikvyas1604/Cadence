@@ -10,7 +10,6 @@ credentials only the team can provide.
 npm install
 # Foundry: https://book.getfoundry.sh
 forge --version
-vercel --version
 ```
 
 ## 1. Contracts — Sepolia
@@ -72,21 +71,20 @@ One `GET /api/intel` from the UI performs the full 402 → sign → retry dance
 and writes the cadence-slot ask. Without credentials the route returns an
 honest `503 intel_not_configured` — no fake quotes are ever served.
 
-## 5. App — Vercel
+## 5. App — self-host
 
 ```bash
-vercel login            # [needs key] interactive login
-vercel link
-vercel env add NEXT_PUBLIC_CHAIN_ID production      # e.g. 11155111
-vercel env add GRAPH_ENDPOINT production
-vercel env add GRAPH_API_KEY production
-vercel env add X402_INTEL_URL production
-vercel env add HEDERA_ACCOUNT_ID production
-vercel env add HEDERA_PRIVATE_KEY production       # server-only secret
-vercel --prod
+cp .env.example .env.local   # then edit:
+#   NEXT_PUBLIC_CHAIN_ID=11155111
+#   GRAPH_ENDPOINT=...          GRAPH_API_KEY=...
+#   X402_INTEL_URL=...          HEDERA_ACCOUNT_ID=...  HEDERA_PRIVATE_KEY=...
+npm run build
+npm start                    # serves at :3000 behind your own proxy/TLS
 ```
 
-`vercel.json` pins the security headers (CSP-style) — committed in the repo.
+Security headers (`X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`,
+`Permissions-Policy`) are set by the app's `next.config.ts`. Put the instance
+behind HTTPS — wallet flows and x402 settlement require it.
 
 ## 6. Post-deploy checks
 
@@ -101,7 +99,7 @@ vercel --prod
 
 ## 7. Rollback
 
-- App: `vercel rollback <previous-deployment>` (instant, under 5 min).
+- App: redeploy the previous git tag (`git checkout <tag> && npm run build && npm start`) — under 5 min.
 - Contracts: immutable by design — no proxy, no upgrade path. A venue bug
   means deploying a NEW hook + pool; slots are epoch-scoped so exposure is
   bounded by one epoch. This is a deliberate testnet-era choice; production

@@ -144,13 +144,13 @@ cp deployments/31337.json ../public/deployments/
 
 Connect an injected wallet (anvil account #1), and the console is live:
 buy a slot → swap → reject without. See [docs/DEPLOY.md](docs/DEPLOY.md) for
-testnet + Vercel deployment.
+testnet deployment.
 
 ## Deployed stack
 
 | Layer | Choice | Status |
 |---|---|---|
-| App | Next.js App Router + TypeScript + Tailwind on Vercel | build green |
+| App | Next.js App Router + TypeScript + Tailwind (self-hosted) | build green |
 | Contracts | Solidity v4 hook + ERC-1155 slots (Foundry, 22 tests) | deployable Sepolia / Anvil |
 | Graph | Studio subgraph source + `/api/graph` proxy | source ready, deploy key pending |
 | Intel | `/api/intel` — x402 paid call (Hedera `@x402/hedera` / EVM `@x402/evm`) | endpoint + payer key pending |
