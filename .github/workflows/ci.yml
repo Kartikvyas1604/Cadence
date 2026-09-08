@@ -32,6 +32,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Unit tests (reducer)
+        run: npm test
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint
