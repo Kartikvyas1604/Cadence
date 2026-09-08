@@ -34,7 +34,7 @@ contract CadenceLpTest is Test {
 
     uint256 constant EPOCH_LEN = 12;
     uint256 constant SWAP_FEE_BPS = 30; // 0.30%
-    uint256 constant REVENUE_SHARE_BPS = 10_000; // 100% to LPs
+    uint256 constant PROTOCOL_TAKE_BPS = 0; // fixture: all proceeds to LPs
     uint256 constant PRICE_PER_ETH = 0.001e18;
     uint256 constant USDC_SEED = 3_000_000e18;
 
@@ -64,7 +64,7 @@ contract CadenceLpTest is Test {
         );
 
         bytes memory args =
-            abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, SWAP_FEE_BPS, REVENUE_SHARE_BPS);
+            abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, SWAP_FEE_BPS, PROTOCOL_TAKE_BPS, address(this));
         bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
         bytes32 salt;
         address hookAddr;
@@ -79,7 +79,7 @@ contract CadenceLpTest is Test {
         slots = new CadenceSlots{salt: bytes32(uint256(11))}(PRICE_PER_ETH, PRICE_PER_ETH * 2, "", address(this));
         router = new CadenceRouter{salt: bytes32(uint256(12))}(manager, address(usdc));
         hook = new CadenceHook{salt: salt}(
-            manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, SWAP_FEE_BPS, REVENUE_SHARE_BPS
+            manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, SWAP_FEE_BPS, PROTOCOL_TAKE_BPS, address(this)
         );
         slots.setHook(address(hook));
 
@@ -188,7 +188,7 @@ contract CadenceLpTest is Test {
         (bool ok,) = address(hook).call{value: proceeds}("");
         assertTrue(ok);
         (,, uint256 revA,,) = hook.lpPosition(lpA);
-        assertEq(revA, (proceeds * REVENUE_SHARE_BPS) / 10_000);
+        assertEq(revA, (proceeds * hook.slotRevenueShareBps()) / 10_000);
     }
 
     function test_revenueParksWhenNoLps() public {
@@ -345,5 +345,119 @@ contract CadenceLpTest is Test {
             1, (address(hook).balance * 2000) / 10_000, address(hook).balance - (address(hook).balance * 2000) / 10_000
         );
         hook.refreshEpoch();
+    }
+}
+
+contract CadenceTakeRateTest is Test {
+    uint160 constant HOOK_FLAGS = uint160(1 << 7 | 1 << 3);
+    IPoolManager manager;
+    MockUSDC usdc;
+    CadenceSlots slots;
+    CadenceHook hook;
+    PoolKey key;
+    address buyer = makeAddr("buyer");
+    address lp = makeAddr("lp");
+    address treasury = makeAddr("treasury");
+    uint256 constant PRICE = 0.001e18;
+    uint256 constant TAKE = 1000; // 10% protocol / 90% LPs (spec default)
+    uint256 constant EPOCH_LEN = 12;
+
+    function setUp() public {
+        manager = IPoolManager(address(new PoolManager(address(0))));
+        usdc = new MockUSDC(address(this));
+        bytes memory codeSlots =
+            abi.encodePacked(type(CadenceSlots).creationCode, abi.encode(PRICE, PRICE * 2, "", address(this)));
+        address slotsAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(21)), keccak256(codeSlots))))));
+        bytes memory codeRouter =
+            abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
+        address routerAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(22)), keccak256(codeRouter))))));
+        bytes memory args = abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, TAKE, treasury);
+        bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
+        bytes32 salt;
+        address hookAddr;
+        while (true) {
+            salt = bytes32(vm.randomUint());
+            hookAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code))))));
+            if (uint160(hookAddr) & Hooks.ALL_HOOK_MASK == uint160(1 << 7 | 1 << 3)) break;
+        }
+        slots = new CadenceSlots{salt: bytes32(uint256(21))}(PRICE, PRICE * 2, "", address(this));
+        CadenceRouter router = new CadenceRouter{salt: bytes32(uint256(22))}(manager, address(usdc));
+        hook = new CadenceHook{salt: salt}(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, TAKE, treasury);
+        slots.setHook(address(hook));
+        key = PoolKey({currency0: Currency.wrap(address(0)), currency1: Currency.wrap(address(usdc)), fee: 0, tickSpacing: 60, hooks: hook});
+        manager.initialize(key, TickMath.getSqrtPriceAtTick(0));
+        usdc.transfer(address(this), 0);
+        usdc.approve(address(hook), type(uint256).max);
+        hook.seedUsdc(3_000_000e18);
+        vm.deal(lp, 10_000e18);
+        vm.deal(buyer, 10_000e18);
+        vm.prank(lp);
+        hook.depositEth{value: 100e18}();
+    }
+
+    function test_takeRateSplits90_10() public {
+        vm.prank(buyer);
+        slots.mintPublic{value: (10e18 * PRICE) / 1e18 + 1 ether}(10e18);
+        uint256 proceeds = (10e18 * PRICE) / 1e18; // 0.01 ETH
+
+        // LP pool = 90% accrued pro-rata (single LP = 100% of pool)
+        (, , uint256 revLp, ,) = hook.lpPosition(lp);
+        assertEq(revLp, (proceeds * 9000) / 10_000);
+        // protocol cut held on the hook
+        assertEq(hook.accruedProtocolRevenue(), proceeds - (proceeds * 9000) / 10_000);
+    }
+
+    function test_withdrawProtocolRevenueTreasuryOnly() public {
+        vm.prank(buyer);
+        slots.mintPublic{value: (10e18 * PRICE) / 1e18 + 1 ether}(10e18);
+        uint256 cut = hook.accruedProtocolRevenue();
+        assertGt(cut, 0);
+
+        vm.prank(treasury);
+        uint256 before = treasury.balance;
+        hook.withdrawProtocolRevenue(treasury);
+        assertEq(treasury.balance - before, cut);
+        assertEq(hook.accruedProtocolRevenue(), 0);
+
+        // non-treasury cannot withdraw
+        vm.prank(lp);
+        vm.expectRevert(CadenceHook.UnsafeWithdraw.selector);
+        hook.withdrawProtocolRevenue(lp);
+    }
+
+    function test_dynamicPriceBounds() public {
+        // within bounds: ask 150% of deploy price accepted
+        uint256 ask = PRICE * 150 / 100;
+        bytes32 receipt = keccak256("x402-receipt");
+        vm.prank(address(this));
+        slots.setSlotPriceFromIntel(ask, receipt);
+        assertEq(slots.pricePerEth(), ask);
+        assertEq(slots.lastIntelAsk(), ask);
+        assertEq(slots.intelAttestationHash(), receipt);
+        assertGt(slots.lastIntelTs(), 0);
+
+        // outside bounds reverts
+        vm.prank(address(this));
+        vm.expectRevert(CadenceSlots.AskOutOfBounds.selector);
+        slots.setSlotPriceFromIntel(PRICE / 2 - 1, receipt);
+
+        vm.prank(address(this));
+        vm.expectRevert(CadenceSlots.AskOutOfBounds.selector);
+        slots.setSlotPriceFromIntel(PRICE * 2 + 1, receipt);
+
+        // missing receipt proof reverts
+        vm.prank(address(this));
+        vm.expectRevert(CadenceSlots.MissingReceipt.selector);
+        slots.setSlotPriceFromIntel(ask, bytes32(0));
+    }
+
+    function test_dynamicPriceMintUsesNewAsk() public {
+        uint256 ask = PRICE * 2; // 200% upper bound
+        slots.setSlotPriceFromIntel(ask, keccak256("receipt"));
+        uint256 cost = (5e18 * ask) / 1e18;
+        uint256 before = buyer.balance;
+        vm.prank(buyer);
+        slots.mintPublic{value: cost + 1 ether}(5e18);
+        assertEq(buyer.balance, 10_000e18 - cost);
     }
 }

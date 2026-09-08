@@ -45,7 +45,8 @@ contract DeployCadence is Script {
         uint256 seedEthAmt;
         uint256 seedUsdcAmt;
         uint256 swapFeeBps;
-        uint256 slotRevenueShareBps;
+        uint256 protocolTakeBps;
+        address protocolTreasury;
     }
 
     struct WireCtx {
@@ -71,7 +72,8 @@ contract DeployCadence is Script {
             seedEthAmt: uint256(vm.envOr("SEED_ETH", bytes32(uint256(1000e18)))),
             seedUsdcAmt: uint256(vm.envOr("SEED_USDC", bytes32(uint256(3_000_000e18)))),
             swapFeeBps: uint256(vm.envOr("SWAP_FEE_BPS", uint256(30))),
-            slotRevenueShareBps: uint256(vm.envOr("SLOT_REVENUE_SHARE_BPS", uint256(10_000)))
+            protocolTakeBps: uint256(vm.envOr("PROTOCOL_TAKE_BPS", uint256(1000))),
+            protocolTreasury: deployer
         });
 
         vm.startBroadcast(pk);
@@ -139,7 +141,7 @@ contract DeployCadence is Script {
         return abi.encodePacked(
             type(CadenceHook).creationCode,
             abi.encode(
-                manager, usdcAddr, slotsAddr, routerAddr, p.lambda, p.epochLen, p.swapFeeBps, p.slotRevenueShareBps
+                manager, usdcAddr, slotsAddr, routerAddr, p.lambda, p.epochLen, p.swapFeeBps, p.protocolTakeBps, p.protocolTreasury
             )
         );
     }
@@ -168,7 +170,8 @@ contract DeployCadence is Script {
             ctx.p.lambda,
             ctx.p.epochLen,
             ctx.p.swapFeeBps,
-            ctx.p.slotRevenueShareBps
+            ctx.p.protocolTakeBps,
+            ctx.p.protocolTreasury
         );
         require(address(hook) == ctx.hook, "hook addr drift");
         console2.log("deployed hook", address(hook));
@@ -207,7 +210,8 @@ contract DeployCadence is Script {
         vm.serializeUint(json, "epochLengthBlocks", ctx.p.epochLen);
         vm.serializeUint(json, "pricePerEth", ctx.p.pricePerEth);
         vm.serializeUint(json, "swapFeeBps", ctx.p.swapFeeBps);
-        vm.serializeUint(json, "slotRevenueShareBps", ctx.p.slotRevenueShareBps);
+        vm.serializeUint(json, "protocolTakeBps", ctx.p.protocolTakeBps);
+        vm.serializeUint(json, "protocolTakeBps", ctx.p.protocolTakeBps);
         string memory out = vm.serializeUint(json, "seedBlock", block.number);
         vm.writeJson(out, string.concat("deployments/", chainId, ".json"));
         console2.log("wrote deployments", string.concat("deployments/", chainId, ".json"));

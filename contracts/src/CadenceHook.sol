@@ -149,8 +149,14 @@ contract CadenceHook is IHooks {
 
     /// @notice Swap fee on the OUTPUT quote token, in bps (default 30 = 0.30%).
     uint256 public swapFeeBps;
-    /// @notice Share of slot-sale proceeds paid to LPs, in bps (default 10000).
-    uint256 public slotRevenueShareBps;
+    /// @notice Protocol take of slot proceeds, in bps (default 1000 = 10%).
+    uint256 public protocolTakeBps;
+    /// @notice Treasury that withdraws the protocol take (immutable).
+    address public immutable protocolTreasury;
+    /// @notice Protocol take accrued on-chain (ETH) — withdrawn via withdrawProtocolRevenue.
+    uint256 public accruedProtocolRevenue;
+
+    event ProtocolRevenueWithdrawn(address indexed to, uint256 amount);
 
     // no epoch has been refreshed yet (0 is a valid epoch id)
     uint256 private constant NEVER = type(uint256).max;
@@ -163,7 +169,8 @@ contract CadenceHook is IHooks {
         uint256 lambdaBps_,
         uint256 epochLengthBlocks_,
         uint256 swapFeeBps_,
-        uint256 slotRevenueShareBps_
+        uint256 protocolTakeBps_,
+        address protocolTreasury_
     ) {
         manager = manager_;
         usdc = usdc_;
@@ -172,7 +179,8 @@ contract CadenceHook is IHooks {
         lambdaBps = lambdaBps_;
         epochLengthBlocks = epochLengthBlocks_;
         swapFeeBps = swapFeeBps_;
-        slotRevenueShareBps = slotRevenueShareBps_;
+        protocolTakeBps = protocolTakeBps_;
+        protocolTreasury = protocolTreasury_;
         lastRefreshedEpoch = type(uint256).max;
 
         Hooks.validateHookPermissions(this, getHookPermissions());
@@ -321,10 +329,25 @@ contract CadenceHook is IHooks {
         emit SwapFeeClaimed(msg.sender, amount);
     }
 
-    /// @notice Slot-sale proceeds forwarded by CadenceSlots on mint/reveal.
+    /// @notice LP share of slot proceeds = 10000 - protocolTakeBps.
+    function slotRevenueShareBps() public view returns (uint256) {
+        return 10_000 - protocolTakeBps;
+    }
+
+    /// @notice Withdraw the accrued protocol take. Only the treasury itself.
+    function withdrawProtocolRevenue(address to) external {
+        if (msg.sender != protocolTreasury) revert UnsafeWithdraw();
+        uint256 amount = accruedProtocolRevenue;
+        if (amount == 0) revert ZeroSwap();
+        accruedProtocolRevenue = 0;
+        Address.sendValue(payable(to), amount);
+        emit ProtocolRevenueWithdrawn(to, amount);
+    }
+
+    /// @notice LP pool of slot-sale proceeds (already net of the protocol take).
     function _accrueSlotRevenue(uint256 proceeds) internal {
         if (totalShares > 0 && proceeds > 0) {
-            revAccPerShare += (proceeds * slotRevenueShareBps * 1e18) / totalShares / 10_000;
+            revAccPerShare += (proceeds * 1e18) / totalShares;
         }
         emit SlotRevenueAccrued(currentEpoch(), proceeds);
     }
@@ -656,7 +679,13 @@ contract CadenceHook is IHooks {
     ///         here); native ETH enters via manager.take during swaps and
     ///         via seedEth. ETH from CadenceSlots is slot-sale revenue.
     receive() external payable {
-        if (msg.sender == slots) _accrueSlotRevenue(msg.value);
+        if (msg.sender == slots) {
+            // §8 split: protocol cut accrues to the treasury ledger; the LP
+            // pool accrues pro-rata by shares. Two ledgers, never mixed.
+            uint256 cut = (msg.value * protocolTakeBps) / 10_000;
+            accruedProtocolRevenue += cut;
+            _accrueSlotRevenue(msg.value - cut);
+        }
     }
 }
 

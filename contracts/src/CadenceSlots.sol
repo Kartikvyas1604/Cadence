@@ -60,6 +60,19 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
 
     /// @notice Ask per ETH of capacity, written by the intel pipeline (owner).
     uint256 public pricePerEth;
+    // §4 dynamic price: bounded updates from paid intel
+    uint256 public slotPriceMin;
+    uint256 public slotPriceMax;
+    uint256 public lastIntelAsk;
+    uint256 public lastIntelTs;
+    bytes32 public intelAttestationHash;
+
+    event SlotPriceUpdated(uint256 ask, bytes32 receiptHash);
+
+    /// @notice Ask outside the deploy-time [50%, 200%] bounds.
+    error AskOutOfBounds();
+    /// @notice Missing x402 payment proof (receipt hash).
+    error MissingReceipt();
     /// @notice Minimum escrow accepted on commitMint — bounds the leak of size
     ///  through the escrow (size itself is never in the payload).
     uint256 public minEscrow;
@@ -84,6 +97,9 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
     {
         pricePerEth = pricePerEth_;
         minEscrow = minEscrow_;
+        // deploy-time bounds: 50%–200% of the deploy ask
+        slotPriceMin = pricePerEth_ / 2;
+        slotPriceMax = pricePerEth_ * 2;
     }
 
     modifier onlyHook() {
@@ -107,6 +123,20 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
 
     function setMinEscrow(uint256 minEscrow_) external onlyOwner {
         minEscrow = minEscrow_;
+    }
+
+    /// @notice §4: push a paid-intel ask onchain. Owner/keeper only. The ask
+    ///         must carry an x402 payment receipt hash and sit inside the
+    ///         deploy-time [50%, 200%] bounds — intel never silently mutates
+    ///         pool config.
+    function setSlotPriceFromIntel(uint256 ask, bytes32 receiptHash) external onlyOwner {
+        if (ask < slotPriceMin || ask > slotPriceMax) revert AskOutOfBounds();
+        if (receiptHash == 0) revert MissingReceipt();
+        pricePerEth = ask;
+        lastIntelAsk = ask;
+        lastIntelTs = block.timestamp;
+        intelAttestationHash = receiptHash;
+        emit SlotPriceUpdated(ask, receiptHash);
     }
 
     // ---------------------------------------------------------------------

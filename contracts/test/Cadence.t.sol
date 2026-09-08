@@ -34,7 +34,7 @@ contract CadenceTest is Test {
     uint256 constant LAMBDA_BPS = 2500; // 25% active
     uint256 constant EPOCH_LEN = 12;
     uint256 constant SWAP_FEE_BPS = 30; // 0.30% on output
-    uint256 constant REVENUE_SHARE_BPS = 10_000; // 100% of slot sales to LPs
+    uint256 constant PROTOCOL_TAKE_BPS = 10_000; // fixture: all proceeds to LPs
 
     uint256 constant SEED_ETH = 1000e18;
     uint256 constant SEED_USDC = 3_000_000e18; // 3000 USDC per ETH
@@ -73,7 +73,7 @@ contract CadenceTest is Test {
         );
 
         bytes memory args = abi.encode(
-            manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN, SWAP_FEE_BPS, REVENUE_SHARE_BPS
+            manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN, SWAP_FEE_BPS, PROTOCOL_TAKE_BPS, address(this)
         );
         bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
         bytes32 salt;
@@ -91,7 +91,7 @@ contract CadenceTest is Test {
         router = new CadenceRouter{salt: bytes32(uint256(12))}(manager, address(usdc));
         require(address(router) == routerAddr, "router addr");
         hook = new CadenceHook{salt: salt}(
-            manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN, SWAP_FEE_BPS, REVENUE_SHARE_BPS
+            manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN, SWAP_FEE_BPS, PROTOCOL_TAKE_BPS, address(this)
         );
         require(address(hook) == hookAddr, "hook addr");
 
