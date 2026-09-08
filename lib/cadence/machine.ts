@@ -117,8 +117,12 @@ function addReject(
   };
 }
 
-/** Shared fill path — executes against the live pool only. */
-function fillSwap(
+/**
+ * Fill event from a REAL transaction receipt. Local state only logs the
+ * event — reserves, slot balance and price history come from the chain
+ * (POOL_SYNC on the next block poll), never from local math.
+ */
+function recordFill(
   state: WorldState,
   sizeEth: number,
   outUsdc: number,
@@ -126,28 +130,11 @@ function fillSwap(
   fromCommitment: boolean,
 ): WorldState {
   const pool = state.pool;
-  const slot = state.wallet.slot;
   const epochId = state.chain.epochId;
   const blockNumber = state.chain.blockNumber;
-  if (!pool || !slot || epochId === null || blockNumber === null) return state;
-  const k = pool.activeReserveEth * pool.activeReserveUsdc;
-  const newEth = pool.activeReserveEth + sizeEth;
-  const newUsdc = k / newEth;
-  const nextPool = {
-    ...pool,
-    activeReserveEth: newEth,
-    activeReserveUsdc: newUsdc,
-  };
+  if (!pool || epochId === null || blockNumber === null) return state;
   return {
     ...state,
-    wallet: {
-      ...state.wallet,
-      slot: {
-        ...slot,
-        capacity: Math.max(0, slot.capacity - capacityUsed),
-      },
-    },
-    pool: nextPool,
     swaps: [
       {
         epochId,
@@ -159,7 +146,7 @@ function fillSwap(
       ...state.swaps,
     ],
     priceHistory: appendPrice(
-      nextPool,
+      pool,
       state.priceHistory,
       blockNumber,
       epochId,
@@ -299,11 +286,11 @@ export function reducer(state: WorldState, action: Action): WorldState {
       const outUsdc = state.pool
         ? quoteSwapOutUsdc(state.pool, action.sizeEth)
         : 0;
-      return fillSwap(withReveal, action.sizeEth, outUsdc, action.sizeEth, true);
+      return recordFill(withReveal, action.sizeEth, outUsdc, action.sizeEth, true);
     }
 
     case "SWAP_SUCCEEDED": {
-      return fillSwap(state, action.sizeEth, action.outUsdc, action.capacityUsed, false);
+      return recordFill(state, action.sizeEth, action.outUsdc, action.capacityUsed, false);
     }
 
     case "SWAP_REJECTED": {

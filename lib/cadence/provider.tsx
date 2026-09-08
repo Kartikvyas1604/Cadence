@@ -15,7 +15,6 @@ import { formatUnits, parseUnits } from "viem";
 import { initialWorld, reducer } from "./machine";
 import type { IntelQuote, RejectReason, WorldState } from "./types";
 import { REJECT_REASONS } from "./types";
-import { epochFromBlock, blocksUntilEpochEnd } from "./types";
 import { useInjectedWallet } from "@/lib/wallet/use-injected-wallet";
 import { useChainState } from "./chain";
 import { loadDeployment, slotsAbi, hookAbi, routerAbi, poolKey, type CadenceDeployment } from "./abis";
@@ -92,13 +91,17 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const world: WorldState = useMemo(
     () => ({
       ...state,
-      chain: {
-        chainId: chain.chainId,
-        blockNumber: chain.blockNumber,
-        epochId: chain.blockNumber != null ? epochFromBlock(chain.blockNumber) : null,
-        blocksUntilEpochEnd:
-          chain.blockNumber != null ? blocksUntilEpochEnd(chain.blockNumber) : null,
-      },
+      chain: (() => {
+        // epoch clock follows the DEPLOYED hook's epoch length, not a constant
+        const len = state.pool?.epochLengthBlocks ?? 12;
+        return {
+          chainId: chain.chainId,
+          blockNumber: chain.blockNumber,
+          epochId: chain.blockNumber != null ? Math.floor(chain.blockNumber / len) : null,
+          blocksUntilEpochEnd:
+            chain.blockNumber != null ? len - (chain.blockNumber % len) : null,
+        };
+      })(),
       wallet: {
         address: wallet.address,
         eth: wallet.ethBalance,
