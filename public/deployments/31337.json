@@ -1,0 +1,11 @@
+{
+  "epochLengthBlocks": 12,
+  "hook": "0xB84530d396ef808D968E9f4DA2a034884C770088",
+  "lambdaBps": 2500,
+  "poolManager": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "pricePerEth": 1000000000000000,
+  "router": "0x44a866AAD6010Ee13C1199Ee815a6953d89DD358",
+  "seedBlock": 0,
+  "slots": "0xEecdC4d532db32433F2AB41316D423A0de243dF9",
+  "usdc": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+}

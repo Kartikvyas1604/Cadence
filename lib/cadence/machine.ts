@@ -68,7 +68,13 @@ export type Action =
   | { type: "SWAP_SUCCEEDED"; sizeEth: number; outUsdc: number; capacityUsed: number }
   | { type: "SWAP_REJECTED"; reason: RejectEvent["reason"]; tradeSize: number; detail: string }
   | { type: "INTEL_QUOTE"; quote: IntelQuote }
-  | { type: "INTEL_ERROR"; message: string };
+  | { type: "INTEL_ERROR"; message: string }
+  /** Deployment manifest found for this chain — pools/panels unlock. */
+  | { type: "DEPLOYMENT_LOADED"; pool: NonNullable<WorldState["pool"]>; slotPricePerEth: number }
+  /** Ground truth from the hook: reserves + written ask. */
+  | { type: "POOL_SYNC"; pool: NonNullable<WorldState["pool"]>; slotPricePerEth: number }
+  /** ERC-1155 slot balance of the connected wallet for the CURRENT epoch. */
+  | { type: "WALLET_SLOT_SYNC"; capacity: number };
 
 /** Quote output of swapping sizeEth into the ACTIVE side only (constant product). */
 export function quoteSwapOutUsdc(
@@ -310,6 +316,22 @@ export function reducer(state: WorldState, action: Action): WorldState {
 
     case "INTEL_ERROR": {
       return { ...state, lastIntelError: action.message };
+    }
+
+    case "DEPLOYMENT_LOADED":
+    case "POOL_SYNC": {
+      return { ...state, pool: action.pool, slotPricePerEth: action.slotPricePerEth };
+    }
+
+    case "WALLET_SLOT_SYNC": {
+      const epochId = state.chain.epochId;
+      if (action.capacity <= 0) {
+        return state.wallet.slot ? { ...state, wallet: { ...state.wallet, slot: null } } : state;
+      }
+      return {
+        ...state,
+        wallet: { ...state.wallet, slot: { epochId: epochId ?? 0, capacity: action.capacity } },
+      };
     }
 
     default:

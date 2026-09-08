@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Foundry project + vendored deps (linted by `forge build`)
+    "contracts/**",
   ]),
 ]);
 

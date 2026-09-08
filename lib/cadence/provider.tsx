@@ -8,16 +8,20 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from "react";
+import type { PublicClient, WalletClient } from "viem";
+import { formatUnits, parseUnits } from "viem";
 import { initialWorld, reducer } from "./machine";
 import type { IntelQuote, RejectReason, WorldState } from "./types";
 import { REJECT_REASONS } from "./types";
 import { epochFromBlock, blocksUntilEpochEnd } from "./types";
 import { useInjectedWallet } from "@/lib/wallet/use-injected-wallet";
 import { useChainState } from "./chain";
-import { randomSalt } from "./hash";
+import { loadDeployment, slotsAbi, hookAbi, routerAbi, poolKey, type CadenceDeployment } from "./abis";
+import { decodeWrappedInner, publicClientFor, walletClientFor, REVERT_SELECTORS } from "./contract";
 
-const IntelContext = createContext<WorldState | null>(null);
+const StateContext = createContext<WorldState | null>(null);
 const ActionsContext = createContext<{
   buySlot: (sizeEth: number) => Promise<void>;
   commitMint: (sizeEth: number) => Promise<void>;
@@ -29,6 +33,44 @@ const ActionsContext = createContext<{
   refreshIntel: () => Promise<boolean>;
 } | null>(null);
 
+interface CommitmentLocal {
+  H: `0x${string}`;
+  salt: `0x${string}`;
+  sizeEth: number;
+  epochId: number;
+}
+
+function toEth(wei: bigint): number {
+  return Number(formatUnits(wei, 18));
+}
+
+function rejectFromRevert(data: string | undefined): { reason: RejectReason; detail: string } | null {
+  const inner = data ? decodeWrappedInner(data) : null;
+  const sel = (inner ?? data ?? "").slice(0, 10).toLowerCase();
+  const mapped = REVERT_SELECTORS[sel];
+  if (!mapped) return null;
+  const reason =
+    mapped === "no-slot"
+      ? "no-slot"
+      : mapped === "oversize"
+        ? "oversize"
+        : mapped === "same-block-passive-unlock"
+          ? "same-block-passive-unlock"
+          : mapped === "bad-reveal"
+            ? "bad-reveal"
+            : ("no-slot" as RejectReason);
+  const extra: Record<string, string> = {
+    "oversize-active": "Trade size exceeds the epoch's ACTIVE reserves.",
+    "insufficient-escrow": "Commitment escrow is below the mint cost for the revealed size.",
+    "capacity-exceeded": "Mint would exceed this epoch's capacity budget.",
+    "zero-size": "Size must be nonzero.",
+  };
+  return {
+    reason,
+    detail: REJECT_REASONS[reason].detail + (extra[mapped] ? ` ${extra[mapped]}` : ""),
+  };
+}
+
 export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialWorld);
   const stateRef = useRef(state);
@@ -36,160 +78,391 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     stateRef.current = state;
   }, [state]);
 
-  // real sources: connected wallet, live chain, paid intel
+  // real sources: connected wallet, live chain, contracts, paid intel
   const wallet = useInjectedWallet();
   const chain = useChainState(wallet.chainId);
 
+  const walletRef = useRef<WalletClient | null>(null);
+  const publicRef = useRef<PublicClient | null>(null);
+  const deploymentRef = useRef<CadenceDeployment | null>(null);
+  const commitmentRef = useRef<CommitmentLocal | null>(null);
+  const [deploymentReady, setDeploymentReady] = useState(false);
+  const deploymentChainRef = useRef<number | null>(null);
+
   const world: WorldState = useMemo(
     () => ({
+      ...state,
       chain: {
         chainId: chain.chainId,
         blockNumber: chain.blockNumber,
-        epochId:
-          chain.blockNumber != null ? epochFromBlock(chain.blockNumber) : null,
+        epochId: chain.blockNumber != null ? epochFromBlock(chain.blockNumber) : null,
         blocksUntilEpochEnd:
-          chain.blockNumber != null
-            ? blocksUntilEpochEnd(chain.blockNumber)
-            : null,
+          chain.blockNumber != null ? blocksUntilEpochEnd(chain.blockNumber) : null,
       },
-      pool: null,
       wallet: {
         address: wallet.address,
         eth: wallet.ethBalance,
-        slot: null,
+        slot: state.wallet.slot,
       },
-      slotPricePerEth: state.intel?.suggestedAskPerEth ?? null,
-      askPerEth: state.intel?.suggestedAskPerEth ?? null,
-      intel: state.intel,
-      intelCalls: state.intelCalls,
-      graph: state.graph,
-      rejects: state.rejects,
-      commitments: state.commitments,
-      swaps: state.swaps,
-      priceHistory: state.priceHistory,
-      lastIntelError: state.lastIntelError,
+      slotPricePerEth: state.slotPricePerEth,
+      askPerEth: state.askPerEth,
     }),
-    [chain.chainId, chain.blockNumber, wallet.address, wallet.ethBalance, state],
+    [state, chain.chainId, chain.blockNumber, wallet.address, wallet.ethBalance],
   );
 
-  const requireContracts = useCallback((): WorldState | null => {
+  // ------------------------------------------------------------------
+  // Contract wiring: load deployment for the current chain, keep clients
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (chain.chainId == null) {
+      deploymentRef.current = null;
+      deploymentChainRef.current = null;
+      queueMicrotask(() => setDeploymentReady(false));
+      return;
+    }
+    if (deploymentChainRef.current === chain.chainId) return;
+    deploymentChainRef.current = chain.chainId;
+    let alive = true;
+    (async () => {
+      const d = await loadDeployment(chain.chainId as number);
+      if (!alive) return;
+      deploymentRef.current = d;
+      publicRef.current = publicClientFor(chain.chainId as number);
+      walletRef.current = walletRef.current; // wallet client refreshed on connect
+      if (d) {
+        dispatch({
+          type: "DEPLOYMENT_LOADED",
+          pool: {
+            pair: "ETH/USDC",
+            lambdaBps: d.lambdaBps,
+            epochLengthBlocks: d.epochLengthBlocks,
+            activeReserveEth: 0,
+            activeReserveUsdc: 0,
+            passiveReserveEth: 0,
+            passiveReserveUsdc: 0,
+          },
+          slotPricePerEth: toEth(BigInt(d.pricePerEth)),
+        });
+      }
+      queueMicrotask(() => setDeploymentReady(true));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [chain.chainId]);
+
+  // wallet client from the injected provider
+  useEffect(() => {
+    walletRef.current = wallet.address && chain.chainId ? walletClientFor((window as unknown as { ethereum: unknown }).ethereum, chain.chainId) : null;
+  }, [wallet.address, chain.chainId]);
+
+  // ------------------------------------------------------------------
+  // Chain truth: poll reserves + slot balance on every new block
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const d = deploymentRef.current;
+    const pc = publicRef.current;
+    if (!d || !pc || chain.blockNumber == null) return;
+    let alive = true;
+    (async () => {
+      try {
+        const [reserves, price] = await Promise.all([
+          pc.readContract({ address: d.hook, abi: hookAbi, functionName: "reserves" }) as Promise<[bigint, bigint, bigint, bigint]>,
+          pc.readContract({ address: d.slots, abi: slotsAbi, functionName: "pricePerEth" }) as Promise<bigint>,
+        ]);
+        if (!alive) return;
+        dispatch({
+          type: "POOL_SYNC",
+          pool: {
+            pair: "ETH/USDC",
+            lambdaBps: d.lambdaBps,
+            epochLengthBlocks: d.epochLengthBlocks,
+            activeReserveEth: toEth(reserves[0]),
+            activeReserveUsdc: toEth(reserves[1]),
+            passiveReserveEth: toEth(reserves[2]),
+            passiveReserveUsdc: toEth(reserves[3]),
+          },
+          slotPricePerEth: toEth(price),
+        });
+      } catch {
+        /* keep last known pool state */
+      }
+      if (wallet.address) {
+        try {
+          const slot = (await pc.readContract({
+            address: d.slots,
+            abi: slotsAbi,
+            functionName: "slotOf",
+            args: [wallet.address as `0x${string}`],
+          })) as bigint;
+          if (!alive) return;
+          dispatch({ type: "WALLET_SLOT_SYNC", capacity: toEth(slot) });
+        } catch {
+          /* keep last */
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [chain.blockNumber, wallet.address, deploymentReady]);
+
+  const requireReady = useCallback((): {
+    ok: boolean;
+    pc: PublicClient;
+    wc: WalletClient;
+    d: CadenceDeployment;
+    s: WorldState;
+  } | null => {
+    const d = deploymentRef.current;
+    const pc = publicRef.current;
+    const wc = walletRef.current;
     const s = stateRef.current;
-    if (!s.pool || s.slotPricePerEth === null || !s.wallet.address) return null;
-    return s;
+    if (!d || !pc || !wc || !s.wallet.address) return null;
+    return { ok: true, pc, wc, d, s };
   }, []);
 
-  // Actions activate only when a real pool, a written ask, and a connected
-  // wallet all exist — until then the panels show their honest states.
-  const buySlot = useCallback(async (sizeEth: number) => {
-    const s = requireContracts();
-    if (!s) return;
-    dispatch({ type: "BUY_SLOT", sizeEth, pricePerEth: s.slotPricePerEth! });
-  }, [requireContracts]);
+  /** Shared write helper: send, wait, decode revert → reject log. */
+  const sendTx = useCallback(
+    async (
+      write: () => Promise<`0x${string}`>,
+      pc: PublicClient,
+      sizeEth: number,
+    ): Promise<"filled" | RejectReason> => {
+      let hash: `0x${string}`;
+      try {
+        hash = await write();
+      } catch (e: unknown) {
+        // wallet-level rejection or pre-simulation revert — extract data
+        const data =
+          (e as { data?: string })?.data ??
+          (e as { details?: string })?.details ??
+          (e instanceof Error ? e.message : "");
+        const r = rejectFromRevert(data.startsWith("0x") ? data : undefined);
+        dispatch({
+          type: "SWAP_REJECTED",
+          reason: r?.reason ?? "no-slot",
+          tradeSize: sizeEth,
+          detail: r?.detail ?? (e instanceof Error ? e.message.slice(0, 140) : "transaction reverted"),
+        });
+        return r?.reason ?? "no-slot";
+      }
+      const receipt = await pc.waitForTransactionReceipt({ hash });
+      if (receipt.status === "reverted") {
+        dispatch({
+          type: "SWAP_REJECTED",
+          reason: "no-slot",
+          tradeSize: sizeEth,
+          detail: "transaction reverted at execution",
+        });
+        return "no-slot";
+      }
+      return "filled";
+    },
+    [],
+  );
 
-  const commitMint = useCallback(async (sizeEth: number) => {
-    const s = requireContracts();
-    if (!s) return;
-    dispatch({
-      type: "COMMIT_MINT",
-      sizeEth,
-      pricePerEth: s.slotPricePerEth!,
-      salt: randomSalt(),
-    });
-  }, [requireContracts]);
+  // ------------------------------------------------------------------
+  // Actions — every path is a REAL contract call
+  // ------------------------------------------------------------------
+  const buySlot = useCallback(
+    async (sizeEth: number) => {
+      const ctx = requireReady();
+      if (!ctx) return;
+      const { pc, wc, d, s } = ctx;
+      const sizeWei = parseUnits(String(sizeEth), 18);
+      const cost = (sizeWei * BigInt(d.pricePerEth)) / parseUnits("1", 18);
+      const value = cost + parseUnits("0.05", 18); // buffer for refund
+      const account = s.wallet.address as `0x${string}`;
+      const ok = await sendTx(
+        () =>
+          wc.writeContract({
+            address: d.slots,
+            abi: slotsAbi,
+            functionName: "mintPublic",
+            args: [sizeWei],
+            account,
+            chain: null,
+            value,
+          }),
+        pc,
+        sizeEth,
+      );
+      if (ok === "filled") {
+        dispatch({
+          type: "BUY_SLOT",
+          sizeEth,
+          pricePerEth: Number(formatUnits(BigInt(d.pricePerEth), 18)),
+        });
+      }
+    },
+    [requireReady, sendTx],
+  );
 
-  const checkPreSwap = (
-    s: WorldState,
-    sizeEth: number,
-    opts: { withoutSlot?: boolean; oversize?: boolean; reachPassive?: boolean },
-  ): RejectReason | null => {
-    if (!s.pool) return "no-slot";
-    if (opts.withoutSlot || !s.wallet.slot || s.wallet.slot.epochId !== s.chain.epochId) {
-      return "no-slot";
-    }
-    if (opts.oversize || sizeEth > s.wallet.slot.capacity) {
-      return "oversize";
-    }
-    if (opts.reachPassive || sizeEth > s.pool.activeReserveEth * 0.95) {
-      return "same-block-passive-unlock";
-    }
-    return null;
-  };
+  const commitMint = useCallback(
+    async (sizeEth: number) => {
+      const ctx = requireReady();
+      if (!ctx) return;
+      const { pc, wc, d, s } = ctx;
+      const sizeWei = parseUnits(String(sizeEth), 18);
+      const epochId = Number(await pc.readContract({ address: d.slots, abi: slotsAbi, functionName: "currentEpoch" }));
+      // 32-byte salt generated locally — size stays off the public payload
+      const salt = `0x${crypto.getRandomValues(new Uint8Array(32)).reduce((a, b) => a + b.toString(16).padStart(2, "0"), "")}` as `0x${string}`;
+      const H = (await pc.readContract({
+        address: d.slots,
+        abi: slotsAbi,
+        functionName: "commitHash",
+        args: [sizeWei, BigInt(epochId), salt],
+      })) as `0x${string}`;
+      const escrow = (sizeWei * BigInt(d.pricePerEth) * 3n) / parseUnits("1", 18);
+      const account = s.wallet.address as `0x${string}`;
+      const ok = await sendTx(
+        () =>
+          wc.writeContract({
+            address: d.slots,
+            abi: slotsAbi,
+            functionName: "commitMint",
+            args: [H],
+            account,
+            chain: null,
+            value: escrow,
+          }),
+        pc,
+        sizeEth,
+      );
+      if (ok === "filled") {
+        commitmentRef.current = { H, salt, sizeEth, epochId };
+        dispatch({
+          type: "COMMIT_MINT",
+          sizeEth,
+          pricePerEth: Number(formatUnits(BigInt(d.pricePerEth), 18)),
+          salt: String(salt),
+        });
+      }
+    },
+    [requireReady, sendTx],
+  );
 
   const attemptSwap = useCallback(
     async (
       sizeEth: number,
       opts: { withoutSlot?: boolean; oversize?: boolean; reachPassive?: boolean } = {},
     ): Promise<"filled" | RejectReason> => {
-      const s = requireContracts();
-      if (!s) return "no-slot";
-      const blocked = checkPreSwap(s, sizeEth, opts);
-      if (blocked) {
-        dispatch({
-          type: "SWAP_REJECTED",
-          reason: blocked,
-          tradeSize: sizeEth,
-          detail: REJECT_REASONS[blocked].detail,
-        });
-        return blocked;
-      }
-      // C1: held slot is a Private Cadence Intent — reveal(size, salt) then consume
-      const slot = s.wallet.slot!;
-      if (slot.commitmentId != null) {
-        const c = s.commitments.find((x) => x.id === slot.commitmentId);
-        if (!c || c.status !== "committed") {
-          return "no-slot";
+      const ctx = requireReady();
+      if (!ctx) return "no-slot";
+      const { pc, wc, d, s } = ctx;
+      // demo reject intents are executed for real: the CONTRACT rejects
+      const swapSize = opts.oversize ? sizeEth * 2 : opts.reachPassive ? Math.max(sizeEth, s.pool?.activeReserveEth ?? sizeEth) : sizeEth;
+      const isPrivate = !opts.withoutSlot && !opts.oversize && !opts.reachPassive && commitmentRef.current != null && commitmentRef.current.sizeEth === sizeEth;
+      const c = commitmentRef.current;
+      if (isPrivate && c) {
+        const ok = await sendTx(
+          () =>
+            wc.writeContract({
+              address: d.router,
+              abi: routerAbi,
+              functionName: "sellEthPrivate",
+              args: [poolKey(d), parseUnits(String(c.sizeEth), 18), c.salt],
+              account: s.wallet.address as `0x${string}`,
+              chain: null,
+              value: parseUnits(String(c.sizeEth), 18),
+            }),
+          pc,
+          c.sizeEth,
+        );
+        if (ok === "filled") {
+          const outUsdc = s.pool
+            ? s.pool.activeReserveUsdc -
+              (s.pool.activeReserveEth * s.pool.activeReserveUsdc) / (s.pool.activeReserveEth + c.sizeEth)
+            : 0;
+          dispatch({ type: "REVEAL_SWAP", sizeEth: c.sizeEth, salt: String(c.salt) });
+          void outUsdc;
+          commitmentRef.current = null;
         }
-        dispatch({ type: "REVEAL_SWAP", sizeEth, salt: c.salt });
-        return "filled";
+        return ok;
       }
-      const outUsdc = requireContracts() && s.pool
-        ? (s.pool.activeReserveUsdc -
-            (s.pool.activeReserveEth * s.pool.activeReserveUsdc) /
-              (s.pool.activeReserveEth + sizeEth))
-        : 0;
-      dispatch({ type: "SWAP_SUCCEEDED", sizeEth, outUsdc, capacityUsed: sizeEth });
-      return "filled";
+      const ok = await sendTx(
+        () =>
+          wc.writeContract({
+            address: d.router,
+            abi: routerAbi,
+            functionName: "swap",
+            args: [poolKey(d), true, parseUnits(String(swapSize), 18)],
+            account: s.wallet.address as `0x${string}`,
+            chain: null,
+            value: parseUnits(String(swapSize), 18),
+          }),
+        pc,
+        swapSize,
+      );
+      if (ok === "filled") {
+        const outUsdc = s.pool
+          ? s.pool.activeReserveUsdc -
+            (s.pool.activeReserveEth * s.pool.activeReserveUsdc) / (s.pool.activeReserveEth + swapSize)
+          : 0;
+        dispatch({ type: "SWAP_SUCCEEDED", sizeEth: swapSize, outUsdc, capacityUsed: swapSize });
+      }
+      return ok;
     },
-    [requireContracts],
+    [requireReady, sendTx],
   );
 
-  // D4: reveal with a wrong salt — the hook must revert
+  // D4: reveal with a wrong salt — the hook must revert (real reject)
   const attemptBadReveal = useCallback(
     async (sizeEth: number): Promise<"filled" | RejectReason> => {
-      const s = requireContracts();
-      if (!s) return "no-slot";
-      const slot = s.wallet.slot;
-      const c =
-        slot && slot.commitmentId != null
-          ? s.commitments.find((x) => x.id === slot.commitmentId)
-          : null;
-      if (!slot || !c || c.epochId !== s.chain.epochId || c.status !== "committed") {
-        return "no-slot";
+      const ctx = requireReady();
+      if (!ctx) return "no-slot";
+      const { pc, wc, d, s } = ctx;
+      const c = commitmentRef.current;
+      if (!c || c.sizeEth !== sizeEth) return "no-slot";
+      const badSalt = `0x${c.salt.slice(2, 66).slice(0, 62)}ff` as `0x${string}`;
+      const ok = await sendTx(
+        () =>
+          wc.writeContract({
+            address: d.router,
+            abi: routerAbi,
+            functionName: "sellEthPrivate",
+            args: [poolKey(d), parseUnits(String(sizeEth), 18), badSalt],
+            account: s.wallet.address as `0x${string}`,
+            chain: null,
+            value: parseUnits(String(sizeEth), 18),
+          }),
+        pc,
+        sizeEth,
+      );
+      if (ok === "filled") {
+        dispatch({ type: "REVEAL_SWAP", sizeEth, salt: String(badSalt) });
+        commitmentRef.current = null;
       }
-      dispatch({ type: "REVEAL_SWAP", sizeEth, salt: `${c.salt}ff` });
-      return "filled";
+      return ok;
     },
-    [requireContracts],
+    [requireReady, sendTx],
   );
 
   const refreshIntel = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch("/api/intel", { method: "POST" });
+      const res = await fetch("/api/intel", { method: "GET" });
+      const body = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
         dispatch({
           type: "INTEL_ERROR",
-          message: `intel endpoint returned ${res.status} — paid x402 intel is not configured yet`,
+          message: `paid intel unavailable (${res.status}): ${String(body.detail ?? body.error ?? "x402 intel not configured")}`,
         });
         return false;
       }
-      const body = (await res.json()) as IntelQuote;
-      dispatch({ type: "INTEL_QUOTE", quote: body });
+      dispatch({
+        type: "INTEL_QUOTE",
+        quote: {
+          suggestedAskPerEth: Number(body.suggestedAskPerEth),
+          asOf: Number(body.asOf ?? Date.now()),
+          rationale: String(body.rationale ?? ""),
+          source: String(body.source ?? "x402"),
+          costUsd: 0,
+        } satisfies IntelQuote,
+      });
       return true;
     } catch {
-      dispatch({
-        type: "INTEL_ERROR",
-        message: "intel endpoint unreachable — paid x402 intel is not configured yet",
-      });
+      dispatch({ type: "INTEL_ERROR", message: "intel endpoint unreachable — paid x402 intel is not configured yet" });
       return false;
     }
   }, []);
@@ -200,14 +473,14 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <IntelContext.Provider value={world}>
+    <StateContext.Provider value={world}>
       <ActionsContext.Provider value={actions}>{children}</ActionsContext.Provider>
-    </IntelContext.Provider>
+    </StateContext.Provider>
   );
 }
 
 export function useCadence(): WorldState {
-  const ctx = useContext(IntelContext);
+  const ctx = useContext(StateContext);
   if (!ctx) throw new Error("useCadence must be used within CadenceProvider");
   return ctx;
 }
