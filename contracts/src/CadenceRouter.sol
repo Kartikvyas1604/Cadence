@@ -133,7 +133,7 @@ contract CadenceRouter is IUnlockCallback {
         return abi.encode(delta);
     }
 
-    // ETH received with the call is forwarded into settle(); any leftover
-    // ETH that reaches this contract is refunded by the swap entry points.
-    receive() external payable {}
+    // NOTE: no receive()/fallback — direct ETH sends revert. Value only
+    // enters with a swap call (forwarded into settle) and leftovers are
+    // refunded to the caller in the same transaction.
 }

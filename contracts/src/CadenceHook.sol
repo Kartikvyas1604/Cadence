@@ -107,6 +107,9 @@ contract CadenceHook is IHooks {
     /// @notice epoch => active ETH depth snapshot (capacity budget for slots).
     mapping(uint256 epochId => uint256) public epochCapacityEth;
     uint256 public lastRefreshedEpoch;
+    /// @notice True once any fill consumed active depth this epoch —
+    ///         blocks mid-epoch re-partitioning via seeds (passive-lock invariant).
+    bool public consumedThisEpoch;
 
     // no epoch has been refreshed yet (0 is a valid epoch id)
     uint256 private constant NEVER = type(uint256).max;
@@ -162,17 +165,22 @@ contract CadenceHook is IHooks {
     // Seeding — LP / pool deployer funds the hook's reserves
     // ------------------------------------------------------------------
 
-    /// @notice Seed ETH reserves. Re-partitions active/passive immediately.
+    /// @notice Seed ETH reserves. Re-partitions ONLY while the epoch's active
+    ///         depth is untouched; once any fill has consumed active depth,
+    ///         seeds accrue to the next refresh. This keeps the epoch
+    ///         invariant: a mid-epoch re-partition can never hand back depth
+    ///         that fills already consumed (repeated dust-seeding cannot
+    ///         unlock passive reserves).
     function seedEth() external payable {
         if (msg.value == 0) revert ZeroSwap();
-        _repartition();
+        if (!consumedThisEpoch) _repartition();
     }
 
-    /// @notice Seed USDC reserves. Re-partitions active/passive immediately.
+    /// @notice Seed USDC reserves. Same re-partition rule as seedEth.
     function seedUsdc(uint256 amount) external {
         if (amount == 0) revert ZeroSwap();
         IERC20Minimal(usdc).transferFrom(msg.sender, address(this), amount);
-        _repartition();
+        if (!consumedThisEpoch) _repartition();
     }
 
     // ------------------------------------------------------------------
@@ -201,6 +209,7 @@ contract CadenceHook is IHooks {
     function _repartition() internal {
         uint256 epochId = currentEpoch();
         lastRefreshedEpoch = epochId;
+        consumedThisEpoch = false;
 
         totalEth = address(this).balance;
         totalUsdc = IERC20Minimal(usdc).balanceOf(address(this));
@@ -314,7 +323,9 @@ contract CadenceHook is IHooks {
         bool fromCommitment,
         address trader
     ) internal returns (BeforeSwapDelta) {
-        // update ACTIVE reserves; passive untouched — locked until refresh
+        // update ACTIVE reserves; passive untouched — locked until refresh.
+        // Marks the epoch as consumed so seeds can no longer re-partition.
+        consumedThisEpoch = true;
         if (zeroForOne) {
             activeEth -= size;
             activeUsdc -= out;

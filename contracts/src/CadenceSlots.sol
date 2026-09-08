@@ -142,11 +142,13 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
         if (size == 0) revert ZeroSize();
         _hookView().refreshEpoch();
         epochId = currentEpoch();
-        uint256 cost = (size * pricePerEth) / 1e18;
-        if (msg.value < cost) revert InsufficientEscrow();
 
+        // capacity bound FIRST — it also bounds the cost arithmetic below
         uint256 remaining = remainingCapacity();
         if (size > remaining) revert CapacityExceeded();
+
+        uint256 cost = (size * pricePerEth) / 1e18;
+        if (msg.value < cost) revert InsufficientEscrow();
 
         mintedCapacity[epochId] += size;
         _mint(msg.sender, epochId, size, "");

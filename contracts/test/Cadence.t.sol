@@ -305,6 +305,32 @@ contract CadenceTest is Test {
         assertEq(hook.activeEth(), ((SEED_ETH + size) * LAMBDA_BPS) / 10_000);
     }
 
+    function test_seedCannotRepartitionAfterConsumption() public {
+        // the passive-lock invariant: once a fill consumes active depth,
+        // seeds (even dust from anyone) must NOT re-partition mid-epoch
+        buySlot(buyer, 10e18);
+        vm.startPrank(buyer);
+        router.swap{value: 10e18}(key, true, 10e18);
+        vm.stopPrank();
+
+        uint256 activeBefore = hook.activeEth();
+        uint256 passiveBefore = hook.passiveEth();
+
+        // dust seed from an unrelated account after consumption
+        vm.deal(outsider, outsider.balance + 1);
+        vm.prank(outsider);
+        hook.seedEth{value: 1}();
+
+        // active NOT refreshed: consumed depth was not handed back
+        assertEq(hook.activeEth(), activeBefore);
+        assertEq(hook.passiveEth(), passiveBefore);
+
+        // seeds still accrue: the next refresh includes them in total
+        vm.roll(block.number + EPOCH_LEN);
+        hook.refreshEpoch();
+        assertGt(hook.activeEth(), 0);
+    }
+
     function test_refreshPermissionless() public {
         vm.roll(block.number + EPOCH_LEN);
         vm.prank(outsider);
