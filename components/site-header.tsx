@@ -6,11 +6,15 @@ import { CadenceLogo } from "./logo";
 import { WalletButton } from "./wallet-button";
 
 const NAV = [
-  { href: "/protocol", label: "Protocol" },
-  { href: "/lp", label: "LP" },
   { href: "/console", label: "Console" },
+  { href: "/buy", label: "Buy" },
+  { href: "/lp", label: "LP" },
+  { href: "/clob", label: "CLOB" },
+  { href: "/router", label: "Router" },
+  { href: "/privacy", label: "Privacy" },
   { href: "/graph", label: "Graph" },
   { href: "/intel", label: "Intel" },
+  { href: "/admin", label: "Admin" },
 ] as const;
 
 export function SiteHeader() {
@@ -23,7 +27,7 @@ export function SiteHeader() {
           <CadenceLogo />
         </Link>
 
-        <nav aria-label="Main">
+        <nav aria-label="Main" className="min-w-0 overflow-x-auto">
           <ul className="flex items-center gap-1">
             {NAV.map((item) => {
               const active = pathname === item.href;
@@ -32,7 +36,7 @@ export function SiteHeader() {
                   <Link
                     href={item.href}
                     aria-current={active ? "page" : undefined}
-                    className={`inline-flex h-10 items-center rounded-md px-3 text-sm transition-colors duration-100 ${
+                    className={`inline-flex h-10 shrink-0 items-center rounded-md px-3 text-sm transition-colors duration-100 ${
                       active
                         ? "bg-accent/10 text-accent-strong"
                         : "text-muted hover:bg-surface-raised hover:text-foreground"
