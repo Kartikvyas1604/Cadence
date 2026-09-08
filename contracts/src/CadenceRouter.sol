@@ -90,13 +90,10 @@ contract CadenceRouter is IUnlockCallback {
         bytes hookData;
     }
 
-    function _unlock(
-        PoolKey calldata key,
-        bool zeroForOne,
-        uint256 amountIn,
-        bytes memory hookData,
-        address trader
-    ) internal returns (BalanceDelta delta) {
+    function _unlock(PoolKey calldata key, bool zeroForOne, uint256 amountIn, bytes memory hookData, address trader)
+        internal
+        returns (BalanceDelta delta)
+    {
         IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
             zeroForOne: zeroForOne,
             amountSpecified: -int256(amountIn),

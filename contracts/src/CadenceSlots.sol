@@ -49,16 +49,12 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
     /// @notice Zero size.
     error ZeroSize();
 
-    event SlotMinted(
-        uint256 indexed epochId, address indexed buyer, uint256 size, uint256 pricePaid
+    event SlotMinted(uint256 indexed epochId, address indexed buyer, uint256 size, uint256 pricePaid);
+    event SlotCommitted(uint256 indexed epochId, bytes32 indexed H, address indexed payer, uint256 escrow);
+    event SlotRevealed(
+        uint256 indexed epochId, bytes32 indexed H, address indexed trader, uint256 size, uint256 consumed
     );
-    event SlotCommitted(
-        uint256 indexed epochId, bytes32 indexed H, address indexed payer, uint256 escrow
-    );
-    event SlotRevealed(uint256 indexed epochId, bytes32 indexed H, address indexed trader, uint256 size, uint256 consumed);
-    event SlotConsumed(
-        uint256 indexed epochId, address indexed trader, uint256 size
-    );
+    event SlotConsumed(uint256 indexed epochId, address indexed trader, uint256 size);
     event SlotExpired(uint256 indexed epochId, address indexed holder, uint256 size);
     event CommitmentExpired(uint256 indexed epochId, bytes32 indexed H, address indexed payer, uint256 escrowRefunded);
 

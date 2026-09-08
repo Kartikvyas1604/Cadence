@@ -41,7 +41,7 @@ function bump(field: string, amount: i64 = 1): void {
 // ---------------------------------------------------------------------
 
 export function handleSlotMinted(event: SlotMinted): void {
-  let e = new CadenceMint(
+  const e = new CadenceMint(
     event.transaction.hash.concatI32(event.logIndex.toI32()),
   );
   e.epochId = event.params.epochId;
@@ -56,7 +56,7 @@ export function handleSlotMinted(event: SlotMinted): void {
 }
 
 export function handleSlotCommitted(event: SlotCommitted): void {
-  let e = new CadenceCommit(
+  const e = new CadenceCommit(
     event.transaction.hash.concatI32(event.logIndex.toI32()),
   );
   e.epochId = event.params.epochId;
@@ -71,7 +71,7 @@ export function handleSlotCommitted(event: SlotCommitted): void {
 }
 
 export function handleSlotRevealed(event: SlotRevealed): void {
-  let e = new CadenceReveal(
+  const e = new CadenceReveal(
     event.transaction.hash.concatI32(event.logIndex.toI32()),
   );
   e.epochId = event.params.epochId;
@@ -85,7 +85,7 @@ export function handleSlotRevealed(event: SlotRevealed): void {
   e.save();
 
   // link commit -> reveal (size becomes public HERE, not before)
-  let commit = CadenceCommit.load(event.params.H.toHex());
+  const commit = CadenceCommit.load(event.params.H.toHex());
   if (commit != null) {
     commit.reveal = e.id;
     commit.save();
@@ -94,7 +94,7 @@ export function handleSlotRevealed(event: SlotRevealed): void {
 }
 
 export function handleSlotConsumed(event: SlotConsumed): void {
-  let e = new CadenceConsume(
+  const e = new CadenceConsume(
     event.transaction.hash.concatI32(event.logIndex.toI32()),
   );
   e.epochId = event.params.epochId;
@@ -112,7 +112,7 @@ export function handleSlotConsumed(event: SlotConsumed): void {
 // ---------------------------------------------------------------------
 
 export function handleCadenceSwap(event: CadenceSwap): void {
-  let e = new CadenceSwapEntity(
+  const e = new CadenceSwapEntity(
     event.transaction.hash.concatI32(event.logIndex.toI32()),
   );
   e.epochId = event.params.epochId;
@@ -129,7 +129,7 @@ export function handleCadenceSwap(event: CadenceSwap): void {
 }
 
 export function handleEpochRefreshed(event: EpochRefreshed): void {
-  let p = new PoolState(event.params.epochId.toString());
+  const p = new PoolState(event.params.epochId.toString());
   p.epochId = event.params.epochId;
   p.activeEth = event.params.activeEth;
   p.activeUsdc = event.params.activeUsdc;

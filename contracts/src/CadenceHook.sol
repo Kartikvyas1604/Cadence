@@ -5,7 +5,8 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import {BeforeSwapDelta, toBeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {BeforeSwapDelta, toBeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 import {SafeCast} from "@uniswap/v4-core/src/libraries/SafeCast.sol";
@@ -72,11 +73,7 @@ contract CadenceHook is IHooks {
         bool fromCommitment
     );
     event EpochRefreshed(
-        uint256 indexed epochId,
-        uint256 activeEth,
-        uint256 activeUsdc,
-        uint256 passiveEth,
-        uint256 passiveUsdc
+        uint256 indexed epochId, uint256 activeEth, uint256 activeUsdc, uint256 passiveEth, uint256 passiveUsdc
     );
 
     // ------------------------------------------------------------------
@@ -357,11 +354,7 @@ contract CadenceHook is IHooks {
     }
 
     /// @notice Constant-product quote against ACTIVE reserves only.
-    function _quoteOut(uint256 activeIn, uint256 activeOut, uint256 size)
-        internal
-        pure
-        returns (uint256 out)
-    {
+    function _quoteOut(uint256 activeIn, uint256 activeOut, uint256 size) internal pure returns (uint256 out) {
         uint256 newIn = activeIn + size;
         out = activeOut - (activeIn * activeOut) / newIn;
     }
@@ -400,11 +393,12 @@ contract CadenceHook is IHooks {
         revert HookNotImplemented();
     }
 
-    function beforeRemoveLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
-        external
-        pure
-        returns (bytes4)
-    {
+    function beforeRemoveLiquidity(
+        address,
+        PoolKey calldata,
+        IPoolManager.ModifyLiquidityParams calldata,
+        bytes calldata
+    ) external pure returns (bytes4) {
         revert HookNotImplemented();
     }
 
@@ -419,13 +413,11 @@ contract CadenceHook is IHooks {
         revert HookNotImplemented();
     }
 
-    function afterSwap(
-        address,
-        PoolKey calldata,
-        IPoolManager.SwapParams calldata,
-        BalanceDelta,
-        bytes calldata
-    ) external pure returns (bytes4, int128) {
+    function afterSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, BalanceDelta, bytes calldata)
+        external
+        pure
+        returns (bytes4, int128)
+    {
         revert HookNotImplemented();
     }
 
@@ -441,11 +433,7 @@ contract CadenceHook is IHooks {
     // Views for the UI / subgraph
     // ------------------------------------------------------------------
 
-    function reserves()
-        external
-        view
-        returns (uint256 aEth, uint256 aUsdc, uint256 pEth, uint256 pUsdc)
-    {
+    function reserves() external view returns (uint256 aEth, uint256 aUsdc, uint256 pEth, uint256 pUsdc) {
         (aEth, aUsdc, pEth, pUsdc) = (activeEth, activeUsdc, passiveEth, passiveUsdc);
     }
 

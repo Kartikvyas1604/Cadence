@@ -52,13 +52,22 @@ contract CadenceTest is Test {
         bytes memory codeSlots = abi.encodePacked(
             type(CadenceSlots).creationCode, abi.encode(PRICE_PER_ETH, PRICE_PER_ETH * 2, "", address(this))
         );
-        bytes memory codeRouter =
-            abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
+        bytes memory codeRouter = abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
         address slotsAddr = address(
-            uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(11)), keccak256(codeSlots)))))
+            uint160(
+                uint256(
+                    keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(11)), keccak256(codeSlots)))
+                )
+            )
         );
         address routerAddr = address(
-            uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(12)), keccak256(codeRouter)))))
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(12)), keccak256(codeRouter))
+                    )
+                )
+            )
         );
 
         bytes memory args = abi.encode(manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN);
@@ -67,7 +76,9 @@ contract CadenceTest is Test {
         address hookAddr;
         while (true) {
             salt = bytes32(vm.randomUint());
-            hookAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code))))));
+            hookAddr = address(
+                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code)))))
+            );
             if (uint160(hookAddr) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) break;
         }
 
@@ -80,7 +91,13 @@ contract CadenceTest is Test {
 
         slots.setHook(address(hook));
 
-        key = PoolKey({currency0: Currency.wrap(address(0)), currency1: Currency.wrap(address(usdc)), fee: 0, tickSpacing: 60, hooks: hook});
+        key = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: Currency.wrap(address(usdc)),
+            fee: 0,
+            tickSpacing: 60,
+            hooks: hook
+        });
 
         manager.initialize(key, TickMath.getSqrtPriceAtTick(0));
 
@@ -103,24 +120,22 @@ contract CadenceTest is Test {
         vm.deal(outsider, 1000e18);
     }
 
-
     /// ------------------------------------------------------------------
     /// Wrapped-error decoding: PoolManager wraps hook reverts in
     /// WrappedError(address, bytes4, bytes, bytes); assert the inner selector.
     /// ------------------------------------------------------------------
 
-    function _rawSwap(address who, bytes memory callData, uint256 value)
-        internal
-        returns (bool ok, bytes memory ret)
-    {
+    function _rawSwap(address who, bytes memory callData, uint256 value) internal returns (bool ok, bytes memory ret) {
         (ok, ret) = address(router).call{value: value}(callData);
     }
 
     function assertWrapped(bytes memory data, bytes4 inner) internal {
         // skip the 4-byte WrappedError selector before decoding
         bytes memory payload = new bytes(data.length - 4);
-        for (uint256 i = 4; i < data.length; i++) payload[i - 4] = data[i];
-        (, , bytes memory innerData, ) = abi.decode(payload, (address, bytes4, bytes, bytes));
+        for (uint256 i = 4; i < data.length; i++) {
+            payload[i - 4] = data[i];
+        }
+        (,, bytes memory innerData,) = abi.decode(payload, (address, bytes4, bytes, bytes));
         assertEq(innerData.length >= 4 ? bytes4(innerData) : bytes4(0), inner, "wrong inner revert");
     }
 
@@ -349,7 +364,7 @@ contract CadenceTest is Test {
         // escrow refunded minus cost, ETH swapped
         assertEq(buyer.balance, ethBefore + escrow - size - (size * PRICE_PER_ETH) / 1e18);
         // commitment consumed
-        (, , , , CadenceSlots.CommitmentStatus status) = _commitment(H);
+        (,,,, CadenceSlots.CommitmentStatus status) = _commitment(H);
         assertEq(uint8(status), uint8(CadenceSlots.CommitmentStatus.Revealed));
     }
 
@@ -368,7 +383,8 @@ contract CadenceTest is Test {
         assertWrapped(ret, CadenceSlots.BadReveal.selector);
 
         vm.startPrank(buyer);
-        (ok, ret) = _rawSwap(buyer, abi.encodeCall(router.sellEthPrivate, (key, size + 1, bytes32(uint256(42)))), size + 1); // wrong size
+        (ok, ret) =
+            _rawSwap(buyer, abi.encodeCall(router.sellEthPrivate, (key, size + 1, bytes32(uint256(42)))), size + 1); // wrong size
         vm.stopPrank();
         assertFalse(ok);
         assertWrapped(ret, CadenceHook.BadReveal.selector);
@@ -376,7 +392,8 @@ contract CadenceTest is Test {
 
     function test_revealWithoutCommitReverts() public {
         vm.startPrank(buyer);
-        (bool ok, bytes memory ret) = _rawSwap(buyer, abi.encodeCall(router.sellEthPrivate, (key, 10e18, bytes32(uint256(42)))), 10e18);
+        (bool ok, bytes memory ret) =
+            _rawSwap(buyer, abi.encodeCall(router.sellEthPrivate, (key, 10e18, bytes32(uint256(42)))), 10e18);
         vm.stopPrank();
         assertFalse(ok);
         assertWrapped(ret, CadenceSlots.BadReveal.selector);
@@ -390,7 +407,8 @@ contract CadenceTest is Test {
         vm.stopPrank();
 
         vm.startPrank(outsider);
-        (bool ok, bytes memory ret) = _rawSwap(outsider, abi.encodeCall(router.sellEthPrivate, (key, size, bytes32(uint256(42)))), size);
+        (bool ok, bytes memory ret) =
+            _rawSwap(outsider, abi.encodeCall(router.sellEthPrivate, (key, size, bytes32(uint256(42)))), size);
         vm.stopPrank();
         assertFalse(ok);
         assertWrapped(ret, CadenceSlots.BadReveal.selector);
@@ -404,7 +422,8 @@ contract CadenceTest is Test {
         vm.stopPrank();
 
         vm.startPrank(buyer);
-        (bool ok, bytes memory ret) = _rawSwap(buyer, abi.encodeCall(router.sellEthPrivate, (key, size, bytes32(uint256(42)))), size);
+        (bool ok, bytes memory ret) =
+            _rawSwap(buyer, abi.encodeCall(router.sellEthPrivate, (key, size, bytes32(uint256(42)))), size);
         vm.stopPrank();
         assertFalse(ok);
         assertWrapped(ret, CadenceSlots.InsufficientEscrow.selector);

@@ -14,7 +14,7 @@ export function rpcUrlFor(chainId: number): string {
 }
 
 export function publicClientFor(_chainId: number): PublicClient {
-  return createPublicClient({ transport: http(rpcUrlFor(chainId)) });
+  return createPublicClient({ transport: http(rpcUrlFor(_chainId)) });
 }
 
 /** Wrap the injected EIP-1193 provider as a viem wallet client. */

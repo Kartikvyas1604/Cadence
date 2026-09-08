@@ -110,15 +110,15 @@ contract DeployCadence is Script {
         internal
         returns (address routerAddr, address slotsAddr)
     {
-        bytes memory codeRouter =
-            abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, usdcAddr));
+        bytes memory codeRouter = abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, usdcAddr));
         bytes32 saltRouter = keccak256("cadence.router.v1");
         routerAddr = predict(CREATE2_FACTORY, saltRouter, codeRouter);
         new CadenceRouter{salt: saltRouter}(manager, usdcAddr);
         console2.log("deployed router", routerAddr);
 
-        bytes memory codeSlots =
-            abi.encodePacked(type(CadenceSlots).creationCode, abi.encode(p.pricePerEth, p.pricePerEth * 2, "", deployerOwner));
+        bytes memory codeSlots = abi.encodePacked(
+            type(CadenceSlots).creationCode, abi.encode(p.pricePerEth, p.pricePerEth * 2, "", deployerOwner)
+        );
         bytes32 saltSlots = keccak256("cadence.slots.v1");
         slotsAddr = predict(CREATE2_FACTORY, saltSlots, codeSlots);
         new CadenceSlots{salt: saltSlots}(p.pricePerEth, p.pricePerEth * 2, "", deployerOwner);
@@ -133,8 +133,7 @@ contract DeployCadence is Script {
         DeployParams memory p
     ) internal view returns (bytes memory) {
         return abi.encodePacked(
-            type(CadenceHook).creationCode,
-            abi.encode(manager, usdcAddr, slotsAddr, routerAddr, p.lambda, p.epochLen)
+            type(CadenceHook).creationCode, abi.encode(manager, usdcAddr, slotsAddr, routerAddr, p.lambda, p.epochLen)
         );
     }
 
@@ -146,7 +145,7 @@ contract DeployCadence is Script {
         DeployParams memory p
     ) internal view returns (bytes32 saltHook) {
         bytes memory code = _hookCode(manager, usdcAddr, slotsAddr, routerAddr, p);
-        for (uint256 i = 0; ; i++) {
+        for (uint256 i = 0;; i++) {
             saltHook = keccak256(abi.encode("cadence.hook.v1", i));
             if (uint160(predict(CREATE2_FACTORY, saltHook, code)) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) break;
             require(i < 5_000_000, "salt mining failed");
