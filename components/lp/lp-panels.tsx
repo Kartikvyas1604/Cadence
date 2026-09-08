@@ -118,10 +118,20 @@ export function LpPositionCard({ className = "" }: { className?: string }) {
     >
       <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
         {[
-          ["deposited", pos?.depositedEth != null ? `${fmtEth(pos.depositedEth)} Ξ` : "—"],
+          [
+            "deposited",
+            pos?.depositedEth != null ? (
+              <>
+                {fmtEth(pos.depositedEth)} <EthIcon />{" "}
+                <span className="text-xs text-muted">ETH</span>
+              </>
+            ) : (
+              "—"
+            ),
+          ],
           ["shares", pos?.shares != null ? fmtEth(pos.shares, 4) : "—"],
         ].map(([k, v]) => (
-          <div key={k}>
+          <div key={String(k)}>
             <dt className="font-mono text-[11px] uppercase tracking-widest text-muted">{k}</dt>
             <dd className="mt-1 font-mono text-lg tabular-nums text-accent-strong">{v}</dd>
           </div>
@@ -152,10 +162,12 @@ export function LpPositionCard({ className = "" }: { className?: string }) {
           />
         </div>
         <div className="mt-2 flex justify-between font-mono text-xs tabular-nums text-muted">
-          <span className="text-accent-strong">
-            active {pool ? fmtEth(pool.activeReserveEth) : "—"} Ξ
+          <span className="flex items-center gap-1 text-accent-strong">
+            active {pool ? fmtEth(pool.activeReserveEth) : "—"} <EthIcon /> ETH
           </span>
-          <span>passive {pool ? fmtEth(pool.passiveReserveEth) : "—"} Ξ</span>
+          <span className="flex items-center gap-1">
+            passive {pool ? fmtEth(pool.passiveReserveEth) : "—"} <EthIcon /> ETH
+          </span>
         </div>
         <p className="mt-3 text-xs leading-5 text-muted">
           Passive is locked until refresh. Only the active side can be filled —
@@ -192,7 +204,14 @@ export function LpCapacityPanel({ className = "" }: { className?: string }) {
           <div key={k}>
             <dt className="font-mono text-[11px] uppercase tracking-widest text-muted">{k}</dt>
             <dd className="mt-1 font-mono text-lg tabular-nums text-accent-strong">
-              {v != null ? `${fmtEth(v)} Ξ` : "—"}
+              {v != null ? (
+                <>
+                  {fmtEth(v)} <EthIcon />{" "}
+                  <span className="text-xs text-muted">ETH</span>
+                </>
+              ) : (
+                "—"
+              )}
             </dd>
           </div>
         ))}
@@ -226,7 +245,9 @@ export function LpRevenuePanel({ className = "" }: { className?: string }) {
           </p>
           <p className="mt-1 font-mono text-2xl tabular-nums text-accent-strong">
             {pos?.claimableRevenueEth != null ? fmtEth(pos.claimableRevenueEth) : "—"}{" "}
-            <span className="text-sm text-muted">Ξ</span>
+            <span className="inline-flex items-center gap-1 text-sm text-muted">
+              <EthIcon /> ETH
+            </span>
           </p>
           <p className="mt-2 text-xs leading-5 text-muted">
             From cadence-slot sales. Share to LPs:{" "}
@@ -290,7 +311,14 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
               shares to burn
             </label>
             <p className="font-mono text-xs tabular-nums text-muted">
-              withdrawable {withdrawable != null ? `${fmtEth(withdrawable)} Ξ` : "—"}
+              withdrawable{" "}
+              {withdrawable != null ? (
+                <span className="inline-flex items-center gap-1">
+                  {fmtEth(withdrawable)} <EthIcon /> ETH
+                </span>
+              ) : (
+                "—"
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-md border border-border-strong bg-surface-raised px-3 focus-within:border-accent">
@@ -403,9 +431,15 @@ export function LpSalesFeed({ className = "" }: { className?: string }) {
                   {e.kind === "mint" ? "sold" : "consumed"}
                 </span>
                 <span className="font-mono text-xs tabular-nums text-muted">
-                  {e.kind === "mint" && e.pricePaid != null
-                    ? `${fmtEth(e.pricePaid, 4)} Ξ`
-                    : `${fmtEth(e.size)} Ξ capacity`}
+                  {e.kind === "mint" && e.pricePaid != null ? (
+                    <span className="inline-flex items-center gap-1">
+                      {fmtEth(e.pricePaid, 4)} <EthIcon /> ETH
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      {fmtEth(e.size)} <EthIcon /> capacity
+                    </span>
+                  )}
                 </span>
               </span>
               <span className="font-mono text-xs tabular-nums text-muted">
