@@ -1,0 +1,113 @@
+schema {
+  query: Query
+}
+
+type Query {
+  cadenceMints(first: Int = 50, skip: Int = 0, orderBy: CadenceMint_orderBy): [CadenceMint!]!
+  cadenceCommits(first: Int = 50, skip: Int = 0): [CadenceCommit!]!
+  cadenceReveals(first: Int = 50, skip: Int = 0): [CadenceReveal!]!
+  cadenceConsumes(first: Int = 50, skip: Int = 0): [CadenceConsume!]!
+  cadenceSwaps(first: Int = 50, skip: Int = 0): [CadenceSwap!]!
+  poolStates(first: Int = 10): [PoolState!]!
+  global: Global!
+}
+
+"""
+Public Cadence slot mint — fixed-price capacity purchase for one epoch.
+"""
+type CadenceMint @entity {
+  id: ID!
+  epochId: BigInt!
+  buyer: Bytes!
+  size: BigInt!
+  pricePaid: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+"""
+Private Cadence Intent — commitment H. Size is NOT indexed here; it is
+hidden until reveal (commit hash public, not private forever).
+"""
+type CadenceCommit @entity {
+  id: ID!
+  epochId: BigInt!
+  H: Bytes!
+  payer: Bytes!
+  escrow: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+  reveal: CadenceReveal
+}
+
+"""
+SlotRevealed — the reveal at fill time. This is where size becomes public.
+"""
+type CadenceReveal @entity {
+  id: ID!
+  epochId: BigInt!
+  H: Bytes!
+  trader: Bytes!
+  size: BigInt!
+  consumed: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+  commit: CadenceCommit!
+}
+
+"""
+SlotConsumed — public-path capacity burn at fill time.
+"""
+type CadenceConsume @entity {
+  id: ID!
+  epochId: BigInt!
+  trader: Bytes!
+  size: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+"""
+Hook fill — the trade executed against ACTIVE reserves only.
+Out is the quote-token amount received; a naive markout/LVR proxy compares
+out at fill with the value one block later (external prices off-chain).
+"""
+type CadenceSwap @entity {
+  id: ID!
+  epochId: BigInt!
+  trader: Bytes!
+  zeroForOne: Boolean!
+  sizeInEth: BigInt!
+  outAmount: BigInt!
+  fromCommitment: Boolean!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+"""
+Per-epoch active/passive partition — the depth ledger.
+"""
+type PoolState @entity {
+  id: ID!
+  epochId: BigInt!
+  activeEth: BigInt!
+  activeUsdc: BigInt!
+  passiveEth: BigInt!
+  passiveUsdc: BigInt!
+  capacityBudgetEth: BigInt!
+  timestamp: BigInt!
+}
+
+type Global @entity {
+  id: ID!
+  totalMinted: BigInt!
+  totalCommitted: BigInt!
+  totalRevealed: BigInt!
+  totalConsumed: BigInt!
+  totalSwaps: BigInt!
+}
