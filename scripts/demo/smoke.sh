@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Cadence end-to-end smoke — the demo's critical path against a local chain.
+# Covers: deploy → mint → swap succeeds → swap without slot rejects →
+# commit-mint (H only) → reveal swap → wrong-salt rejects.
+set -euo pipefail
+
+RPC=${RPC:-http://localhost:8545}
+PK0=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+PK1=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+BUYER=0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+
+say()  { printf "\n== %s ==\n" "$1"; }
+fail() { printf "SMOKE FAIL: %s\n" "$1" >&2; exit 1; }
+
+# fresh chain with the CREATE2 deployer predeployed
+pkill -f "anvil --silent" 2>/dev/null || true
+sleep 1
+anvil --silent > /tmp/anvil-smoke.log 2>&1 &
+ANVIL_PID=$!
+sleep 4
+
+cd "$(dirname "$0")/../../contracts"
+export PRIVATE_KEY=$PK0
+# anvil automines one block per tx — a longer epoch keeps the whole demo
+# path (deploy ≈ 10 txs + mint/swap/commit/reveal ≈ 7 txs) inside epoch 0
+export EPOCH_LENGTH=${EPOCH_LENGTH:-120}
+forge script script/DeployCadence.s.sol --rpc-url $RPC --broadcast --slow > /tmp/deploy-smoke.log 2>&1 \
+  || fail "deploy failed (see /tmp/deploy-smoke.log)"
+
+S=$(python3 -c "import json;print(json.load(open('deployments/31337.json'))['slots'])")
+R=$(python3 -c "import json;print(json.load(open('deployments/31337.json'))['router'])")
+H=$(python3 -c "import json;print(json.load(open('deployments/31337.json'))['hook'])")
+U=$(python3 -c "import json;print(json.load(open('deployments/31337.json'))['usdc'])")
+KEY="(0x0000000000000000000000000000000000000000,$U,0,60,$H)"
+echo "slots=$S hook=$H router=$R"
+
+# fresh chain: blocks 1..12 are epoch 0 — plenty of room for the whole path
+
+say "1. mint 10 ETH slot (fixed price)"
+cast send $S "mintPublic(uint256)(uint256)" 10e18 --value 1.1e18 --private-key $PK1 --rpc-url $RPC > /dev/null \
+  || fail "mintPublic failed"
+SLOT=$(cast call $S "slotOf(address)(uint256)" $BUYER --rpc-url $RPC | cut -d" " -f1)
+[ "$SLOT" = "10000000000000000000" ] || fail "slot balance expected 10e18, got $SLOT"
+echo "slot balance ok: $SLOT"
+
+say "2. swap WITH slot succeeds (1 ETH -> USDC)"
+BEFORE=$(cast call $U "balanceOf(address)(uint256)" $BUYER --rpc-url $RPC | cut -d" " -f1)
+cast send $R "swap((address,address,uint24,int24,address),bool,uint256)" "$KEY" true 1e18 \
+  --value 1e18 --private-key $PK1 --rpc-url $RPC 2>&1 | grep -q "status               1 (success)" \
+  || fail "swap with slot did not succeed"
+AFTER=$(cast call $U "balanceOf(address)(uint256)" $BUYER --rpc-url $RPC | cut -d" " -f1)
+python3 -c "import sys; sys.exit(0 if int('$AFTER') > int('$BEFORE') else 1)" || fail "USDC out not received"
+echo "filled: +$(python3 -c "print(int('$AFTER')-int('$BEFORE'))") wei USDC"
+
+say "3. oversize vs slot rejects"
+OUT=$(cast send $R "swap((address,address,uint24,int24,address),bool,uint256)" "$KEY" true 20e18 \
+  --value 20e18 --private-key $PK1 --rpc-url $RPC 2>&1 || true)
+echo "$OUT" | grep -q "0x42af5088" || fail "oversize did not reject (want OversizeVsSlot)"
+echo "oversize rejected ok"
+
+say "4. swap WITHOUT slot rejects (NoCadenceSlot)"
+OUT=$(cast send $R "swap((address,address,uint24,int24,address),bool,uint256)" "$KEY" true 1e18 \
+  --value 1e18 \
+  --private-key 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6 \
+  --rpc-url $RPC 2>&1 || true)
+echo "$OUT" | grep -q "0xb6db9bd9" || fail "no-slot swap did not revert with NoCadenceSlot"
+echo "no-slot rejected ok (0xb6db9bd9)"
+
+say "5. Private Cadence Intent: commit H (size hidden) then reveal-swap"
+EPOCH=$(cast call $S "currentEpoch()(uint256)" --rpc-url $RPC | cut -d" " -f1)
+SALT=$(cast keccak "cadence-smoke-salt")
+HVAL=$(cast keccak $(cast abi-encode "f(uint256,uint256,bytes32)" 5e18 "$EPOCH" $SALT))
+cast send $S "commitMint(bytes32)" $HVAL --value 0.05e18 --private-key $PK1 --rpc-url $RPC > /dev/null \
+  || fail "commitMint failed"
+cast send $R "sellEthPrivate((address,address,uint24,int24,address),uint256,bytes32)" "$KEY" 5e18 $SALT \
+  --value 5e18 --private-key $PK1 --rpc-url $RPC 2>&1 | grep -q "status               1 (success)" \
+  || fail "reveal swap failed"
+echo "private fill ok (revealed at consume)"
+
+say "6. wrong-salt reveal rejects"
+OUT=$(cast send $R "sellEthPrivate((address,address,uint24,int24,address),uint256,bytes32)" "$KEY" 5e18 \
+  $(cast keccak "wrong-salt") --value 5e18 --private-key $PK1 --rpc-url $RPC 2>&1 || true)
+echo "$OUT" | grep -qE "0x8ff14e0d" || fail "bad reveal did not revert"
+echo "bad reveal rejected ok (0x8ff14e0d)"
+
+say "PASS — full demo path verified on-chain"
+kill $ANVIL_PID 2>/dev/null || true
