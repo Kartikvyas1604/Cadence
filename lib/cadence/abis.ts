@@ -113,6 +113,76 @@ export const lpModuleAbi = [
   { type: "event", name: "SwapFeeAccrued", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "feeUsdc", type: "uint256", indexed: false }] },
 ] as const;
 
+
+/**
+ * Secondary CLOB (Extended §1) — limit buy/sell of ERC-1155 epoch slots.
+ * Backend contract (must match for the UI to light up):
+ *   placeOrder(bool side, uint256 epochId, uint256 size, uint256 price) payable
+ *     side: true = buy (escrow quote), false = sell (escrow slots via approval)
+ *   cancelOrder(uint256 orderId)
+ *   orders(uint256) view → (maker, side, epochId, size, price, filled, status)
+ *   openOrderIds(uint256 epochId) view → uint256[]
+ *   epochTrades(uint256 epochId) view → (buyId, sellId, size, price)[]
+ *   nextOrderId() view → uint256
+ * Events: OrderPlaced(id, maker, side, epochId, size, price) ·
+ *         OrderCanceled(id) · ClobTrade(buyId, sellId, size, price) ·
+ *         OrdersExpired(epochId)
+ */
+export const clobAbi = [
+  { type: "function", name: "placeOrder", stateMutability: "payable", inputs: [{ name: "side", type: "bool" }, { name: "epochId", type: "uint256" }, { name: "size", type: "uint256" }, { name: "price", type: "uint256" }], outputs: [{ name: "id", type: "uint256" }] },
+  { type: "function", name: "cancelOrder", stateMutability: "nonpayable", inputs: [{ name: "orderId", type: "uint256" }], outputs: [] },
+  { type: "function", name: "orders", stateMutability: "view", inputs: [{ name: "", type: "uint256" }], outputs: [{ name: "maker", type: "address" }, { name: "side", type: "bool" }, { name: "epochId", type: "uint256" }, { name: "size", type: "uint256" }, { name: "price", type: "uint256" }, { name: "filled", type: "uint256" }, { name: "status", type: "uint8" }] },
+  { type: "function", name: "openOrderIds", stateMutability: "view", inputs: [{ name: "", type: "uint256" }], outputs: [{ name: "", type: "uint256[]" }] },
+  { type: "event", name: "OrderPlaced", inputs: [{ name: "id", type: "uint256", indexed: true }, { name: "maker", type: "address", indexed: true }, { name: "side", type: "bool", indexed: false }, { name: "epochId", type: "uint256", indexed: false }, { name: "size", type: "uint256", indexed: false }, { name: "price", type: "uint256", indexed: false }] },
+  { type: "event", name: "OrderCanceled", inputs: [{ name: "id", type: "uint256", indexed: true }, { name: "maker", type: "address", indexed: true }] },
+  { type: "event", name: "ClobTrade", inputs: [{ name: "buyId", type: "uint256", indexed: true }, { name: "sellId", type: "uint256", indexed: true }, { name: "size", type: "uint256", indexed: false }, { name: "price", type: "uint256", indexed: false }] },
+  { type: "event", name: "OrdersExpired", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "count", type: "uint256", indexed: false }] },
+] as const;
+
+/**
+ * Multi-pool router + registry (Extended §2).
+ *   registerPool(poolKey) — authorized deployers
+ *   poolCount() / poolAt(uint256) / poolActive(bytes32)
+ *   quoteRoute(uint256 sizeEth, bool zeroForOne) view → (poolId, hook, remainingCapacity, slotPrice)[]
+ *   executeRoute(bytes32 poolId, uint256 sizeEth) payable
+ * Events: PoolRegistered(poolId, hook) · RouteExecuted(poolId, trader, sizeEth)
+ */
+export const routerRegistryAbi = [
+  { type: "function", name: "registerPool", stateMutability: "nonpayable", inputs: [{ name: "key", type: "tuple", components: [{ name: "currency0", type: "address" }, { name: "currency1", type: "address" }, { name: "fee", type: "uint24" }, { name: "tickSpacing", type: "int24" }, { name: "hooks", type: "address" }] }], outputs: [] },
+  { type: "function", name: "poolCount", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "quoteRoute", stateMutability: "view", inputs: [{ name: "sizeEth", type: "uint256" }, { name: "zeroForOne", type: "bool" }], outputs: [{ name: "", type: "tuple[]" }] },
+  { type: "function", name: "executeRoute", stateMutability: "payable", inputs: [{ name: "poolId", type: "bytes32" }, { name: "sizeEth", type: "uint256" }], outputs: [] },
+  { type: "event", name: "PoolRegistered", inputs: [{ name: "poolId", type: "bytes32", indexed: true }, { name: "hook", type: "address", indexed: true }] },
+  { type: "event", name: "RouteExecuted", inputs: [{ name: "poolId", type: "bytes32", indexed: true }, { name: "trader", type: "address", indexed: true }, { name: "sizeEth", type: "uint256", indexed: false }] },
+] as const;
+
+/**
+ * Protocol take + dynamic slot price (Extended §8 / §4).
+ * Lives on the hook (take) and slots (price). UI probes both.
+ *   protocolTreasury() view → address
+ *   accruedProtocolRevenue() view → uint256 (ETH)
+ *   withdrawProtocolRevenue(address to) — owner
+ *   slotPriceMin() / slotPriceMax() view → uint256 (wei ETH)
+ *   lastIntelAsk() view → uint256 · lastIntelTs() view → uint256
+ *   intelAttestationHash() view → bytes32
+ *   setSlotPriceFromIntel(uint256 ask, bytes32 receiptHash) — bounded
+ * Events: ProtocolRevenueWithdrawn(to, amount) · SlotPriceUpdated(ask, receiptHash)
+ */
+export const adminAbi = [
+  { type: "function", name: "protocolTreasury", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "address" }] },
+  { type: "function", name: "protocolTakeBps", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "accruedProtocolRevenue", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "withdrawProtocolRevenue", stateMutability: "nonpayable", inputs: [{ name: "to", type: "address" }], outputs: [] },
+  { type: "function", name: "slotPriceMin", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "slotPriceMax", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "lastIntelAsk", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "lastIntelTs", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "intelAttestationHash", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "bytes32" }] },
+  { type: "function", name: "setSlotPriceFromIntel", stateMutability: "nonpayable", inputs: [{ name: "ask", type: "uint256" }, { name: "receiptHash", type: "bytes32" }], outputs: [] },
+  { type: "event", name: "ProtocolRevenueWithdrawn", inputs: [{ name: "to", type: "address", indexed: true }, { name: "amount", type: "uint256", indexed: false }] },
+  { type: "event", name: "SlotPriceUpdated", inputs: [{ name: "ask", type: "uint256", indexed: false }, { name: "receiptHash", type: "bytes32", indexed: false }] },
+] as const;
+
 /** PoolKey struct type for viem writes. */
 export function poolKey(d: CadenceDeployment) {
   return {
