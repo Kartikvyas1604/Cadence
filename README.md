@@ -50,8 +50,16 @@ use, you lose.
 **4 · The rejects.** Reverting is a feature. Every refusal is public and indexed:
 
 - **No slot** — the trader holds no cadence slot for this epoch
-- **Oversize** — the trade exceeds the slot's capacity
+- **Oversize** — the trade exceeds the slot's capacity (or the epoch's active depth)
 - **Same-block passive unlock** — a split order tries to reach locked reserves
+- **Bad reveal** — a Private Cadence Intent reveal does not hash to the commitment
+
+**5 · Private Cadence Intent.** Beat two, kept second on purpose: a buyer can
+mint against a commitment `H = hash(size, epochId, salt)` — the size is never in
+the public mint payload. At fill time `beforeSwap` verifies the reveal
+`(size, salt)`, emits `SlotRevealed`, consumes the reserved capacity and refunds
+the unused escrow. The commitment hash is public; the size becomes public at
+fill — commit-reveal on **capacity intent only**, never a dark AMM.
 
 **The whole loop in one line:**
 
@@ -78,8 +86,9 @@ A live demo console proves every claim on one screen:
 |---|---|
 | Buy a cadence slot | Fixed-price ERC-1155 mint, current epoch only, expiry named |
 | Swap | The gate: slot ≥ size, notional burned, active-only quote |
-| Reject log | No-slot / oversize / passive-unlock reverts, live |
-| Graph panel | Mint / burn / consume index feed with per-epoch notionals |
+| Reject log | No-slot / oversize / passive-unlock / bad-reveal reverts, live |
+| Graph panel | Mint / burn / consume + commit→reveal feed (live Studio subgraph) |
+| Private intent | Commitment-only mint, reveal at fill, escrow bound named |
 | Pay for the ask | One paid x402 call on Hedera writes the slot ask |
 
 **Judge demo** — press Run demo and it plays the entire loop in one take:
@@ -111,23 +120,49 @@ numerics. Near-black `#0B0A08`, amber `#F0B441` at roughly 9.2:1 contrast, warm
 grays throughout — never cool. The full system lives in
 [brand.md](brand.md).
 
-## Roadmap
+## Bounty map (exactly three, all load-bearing)
 
-- [x] Typed protocol state machine — epoch refresh, slot mint, gate, rejects, intel
-- [x] Demo console with live reject paths and judge demo
-- [x] Simulated fork semantics; contract calls wire in at the same seams
-- [ ] Uniswap v4 hook (Foundry) — real `beforeSwap` gate on-chain
-- [ ] The Graph Studio subgraph — production indexing
-- [ ] Hedera x402 intel node — live paid quotes
+| Partner | Track | What ships |
+|---|---|---|
+| **Uniswap Foundation** | Best Uniswap Stack / v4 hooks | `CadenceHook`: active/passive PA-AMM + cadence-slot gate in `beforeSwap` (custom-curve accounting, Foundry-tested) |
+| **The Graph** | Composable/Standardized products | Studio subgraph: mint/burn/consume + `SlotCommitted → SlotRevealed`, live via the `/api/graph` route handler |
+| **Hedera** | x402 agentic payments | ≥1 paid capacity/toxicity intel call through `/api/intel` (Blocky402 testnet) that writes the cadence-slot ask |
 
 ## Run it locally
 
-| Command | What it does |
-|---|---|
-| `npm install` | Install dependencies |
-| `npm run dev` | Start the dev server at localhost:3000 |
-| `npm run build` | Production build |
-| `npm run lint` | Lint |
+```bash
+npm install
+npm run dev            # app at localhost:3000
+
+cd contracts
+anvil                  # local chain (predeploys the CREATE2 factory)
+export PRIVATE_KEY=0xac09…ff80   # anvil account #0
+forge script script/DeployCadence.s.sol \
+  --rpc-url http://localhost:8545 --broadcast --slow
+cp deployments/31337.json ../public/deployments/
+```
+
+Connect an injected wallet (anvil account #1), and the console is live:
+buy a slot → swap → reject without. See [docs/DEPLOY.md](docs/DEPLOY.md) for
+testnet + Vercel deployment.
+
+## Deployed stack
+
+| Layer | Choice | Status |
+|---|---|---|
+| App | Next.js App Router + TypeScript + Tailwind on Vercel | build green |
+| Contracts | Solidity v4 hook + ERC-1155 slots (Foundry, 22 tests) | deployable Sepolia / Anvil |
+| Graph | Studio subgraph source + `/api/graph` proxy | source ready, deploy key pending |
+| Intel | `/api/intel` — x402 paid call (Hedera `@x402/hedera` / EVM `@x402/evm`) | endpoint + payer key pending |
+
+## Named risks
+
+> **Say it plainly:** unused cadence slots expire worthless at epoch refresh.
+> A slot is capacity, not LP equity. Active depth is capped at λ × total
+> reserves. Scarcity is the product — and it cuts both ways.
+> Commitments leak an escrow upper bound (disclosed; size itself is hidden).
+> Contracts are unaudited, testnet-grade, immutable (no proxies). See
+> [SECURITY.md](SECURITY.md).
 
 ## Named risks
 
