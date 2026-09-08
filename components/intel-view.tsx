@@ -1,10 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Lock } from "lucide-react";
 import { IntelPanel } from "./intel-panel";
 import { EthIcon } from "./eth-icon";
+import { Panel } from "./panel";
 import { useCadence } from "@/lib/cadence/provider";
+import { useModuleProbe } from "@/lib/cadence/use-module-probe";
+import { adminAbi } from "@/lib/cadence/abis";
 import { fmtPricePerEth } from "@/lib/cadence/format";
 
 const FLOW = [
@@ -27,6 +31,8 @@ const FLOW = [
 
 export function IntelView() {
   const s = useCadence();
+  const [mode, setMode] = useState<"public" | "cre">("public");
+  const priceWired = useModuleProbe(s.chain.chainId, (d) => d.slots, adminAbi, "slotPriceMin");
   return (
     <main className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-12 md:px-6 lg:px-8">
@@ -100,6 +106,15 @@ export function IntelView() {
           </section>
         </div>
 
+        <div className="mt-10 grid gap-6 lg:grid-cols-3">
+          <ConfidentialAskPanel
+            className="lg:col-span-2"
+            mode={mode}
+            setMode={setMode}
+          />
+          <DynamicPricePanel className="lg:col-span-1" wired={priceWired} />
+        </div>
+
         <div className="mt-10 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-accent/30 bg-accent/5 px-5 py-4">
           <p className="text-sm leading-6 text-muted">
             <span className="font-medium text-foreground">
@@ -116,5 +131,147 @@ export function IntelView() {
         </div>
       </div>
     </main>
+  );
+}
+
+/** Extended §6 — CRE TEE confidential ask vs the public x402 model. */
+function ConfidentialAskPanel({
+  className = "",
+  mode,
+  setMode,
+}: {
+  className?: string;
+  mode: "public" | "cre";
+  setMode: (m: "public" | "cre") => void;
+}) {
+  return (
+    <Panel
+      id="intel-confidential"
+      step="ask model"
+      title="Who computes the ask"
+      caption="Public x402 model by default. CRE runs the toxicity model inside a TEE — only the ask and an attestation come out."
+      className={className}
+    >
+      <div className="flex flex-1 flex-col gap-4">
+        <fieldset>
+          <legend className="sr-only">Ask model</legend>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["public", "Public x402 model"],
+                ["cre", "Confidential ask (CRE)"],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={mode === v}
+                onClick={() => setMode(v)}
+                className={`inline-flex h-10 min-w-28 items-center justify-center gap-1.5 rounded-md border font-mono text-xs uppercase tracking-widest transition-colors duration-100 ${
+                  mode === v
+                    ? "border-accent/60 bg-accent/10 text-accent-strong"
+                    : "border-border text-muted hover:border-border-strong"
+                }`}
+              >
+                {v === "cre" ? <Lock className="size-3.5" aria-hidden /> : null}
+                {v}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        {mode === "public" ? (
+          <dl className="grid gap-3 font-mono text-sm sm:grid-cols-2">
+            {(
+              [
+                ["model", "blocky402 intel node (public)"],
+                ["inputs", "utilization · toxicity proxy"],
+                ["output", "suggestedAsk + rationale"],
+                ["payment", "x402 per call — no subscription"],
+              ] as const
+            ).map(([k, v]) => (
+              <div key={k} className="rounded-md border border-border bg-surface-raised p-3">
+                <dt className="text-[11px] uppercase tracking-widest text-muted">{k}</dt>
+                <dd className="mt-1 text-xs leading-5 text-foreground">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <dl className="grid gap-3 font-mono text-sm sm:grid-cols-2">
+            {(
+              [
+                ["model", "Chainlink CRE confidential workflow (TEE)"],
+                ["inputs", "stays private inside the workflow"],
+                ["output", "ask + attestation only"],
+                ["payment", "x402 still pays for the request"],
+              ] as const
+            ).map(([k, v]) => (
+              <div key={k} className="rounded-md border border-border bg-surface-raised p-3">
+                <dt className="text-[11px] uppercase tracking-widest text-muted">{k}</dt>
+                <dd className="mt-1 text-xs leading-5 text-foreground">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+
+        <p className="text-xs leading-5 text-muted">
+          {mode === "cre"
+            ? "The toxicity model never leaves the TEE — Cadence sees the ask and a verifiable attestation, nothing else."
+            : "The public model explains its quote. Switch to CRE when the toxicity inputs must stay private."}
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+/** Extended §4 — dynamic onchain slot price, bounded by intel. */
+function DynamicPricePanel({
+  className = "",
+  wired,
+}: {
+  className?: string;
+  wired: boolean | null;
+}) {
+  const s = useCadence();
+  const suggested = s.intel?.suggestedAskPerEth ?? null;
+  const onchain = s.slotPricePerEth;
+
+  return (
+    <Panel
+      id="intel-price"
+      step="apply ask"
+      title="Onchain price"
+      caption="Suggested ask → setSlotPriceFromIntel(ask, receiptHash) inside 50%–200% bounds."
+      className={className}
+    >
+      <dl className="grid flex-1 content-start gap-4">
+        <div>
+          <dt className="font-mono text-[11px] uppercase tracking-widest text-muted">suggested ask</dt>
+          <dd className="mt-1 font-mono text-2xl tabular-nums text-info">
+            {suggested != null ? fmtPricePerEth(suggested) : "—"}{" "}
+            <span className="text-sm text-muted"><EthIcon /> ETH</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="font-mono text-[11px] uppercase tracking-widest text-muted">onchain ask</dt>
+          <dd className="mt-1 font-mono text-2xl tabular-nums text-accent-strong">
+            {onchain != null ? fmtPricePerEth(onchain) : "—"}{" "}
+            <span className="text-sm text-muted"><EthIcon /> ETH</span>
+          </dd>
+        </div>
+      </dl>
+      <button
+        type="button"
+        disabled
+        className="mt-4 inline-flex h-11 min-w-32 items-center justify-center rounded-md border border-border-strong bg-surface-raised px-5 text-sm font-medium text-foreground opacity-40"
+      >
+        apply ask
+      </button>
+      <p className="mt-3 text-xs leading-5 text-muted">
+        {wired === false
+          ? "setSlotPriceFromIntel is not on this deployment yet — the ask stays at the deploy default until it lands."
+          : "Apply is keeper/authorized. Intel never silently mutates pool config."}
+      </p>
+    </Panel>
   );
 }
