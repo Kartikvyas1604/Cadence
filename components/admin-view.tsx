@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Check } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { EthIcon } from "@/components/eth-icon";
 import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
@@ -62,6 +63,11 @@ function TreasuryPanel({
   const [accrued, setAccrued] = useState<number | null>(null);
   const [treasury, setTreasury] = useState<string | null>(null);
 
+  const isTreasury =
+    treasury != null &&
+    s.wallet.address != null &&
+    treasury.toLowerCase() === s.wallet.address.toLowerCase();
+
   useEffect(() => {
     if (wired !== true || s.chain.chainId == null) return;
     let alive = true;
@@ -110,16 +116,47 @@ function TreasuryPanel({
             </div>
             <div className="rounded-md border border-border bg-surface-raised p-4">
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted">
-                treasury
+                treasury (on-chain)
               </p>
               <p className="mt-1 break-all font-mono text-sm tabular-nums text-foreground">
                 {treasury ?? "—"}
               </p>
+              <p className="mt-1 font-mono text-[10px] tabular-nums text-muted">
+                {treasury ? `${treasury.slice(0, 8)}…${treasury.slice(-6)}` : "—"}
+              </p>
             </div>
           </div>
+
+          {/* connected account + authorization state */}
+          <div className="rounded-md border border-border bg-surface-raised p-4">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-muted">
+              connected account
+            </p>
+            {s.wallet.address ? (
+              <>
+                <p className="mt-1 break-all font-mono text-sm tabular-nums text-foreground">
+                  {s.wallet.address}
+                </p>
+                {isTreasury ? (
+                  <p className="mt-1.5 inline-flex items-center gap-1.5 rounded border border-success/50 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-success">
+                    <Check className="size-3" aria-hidden /> you are the treasury — withdraw enabled
+                  </p>
+                ) : (
+                  <p className="mt-1.5 inline-flex items-center gap-1.5 rounded border border-danger/50 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-danger">
+                    not the treasury — withdraw disabled
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="mt-1 text-sm text-muted">
+                Connect the treasury wallet to withdraw the accrued take.
+              </p>
+            )}
+          </div>
+
           <button
             type="button"
-            disabled={!s.wallet.address || pending}
+            disabled={!isTreasury || pending || (accrued ?? 0) <= 0}
             onClick={async () => {
               setPending(true);
               try {
@@ -133,8 +170,9 @@ function TreasuryPanel({
             {pending ? "withdrawing…" : "withdraw to treasury"}
           </button>
           <p className="text-xs leading-5 text-muted">
-            Withdraw is treasury-only. Slot revenue (LPs) and swap fees are
-            separate ledgers and never route through here.
+            Withdraw is treasury-only{isTreasury ? "" : " — connect the treasury wallet to enable"}. Slot
+            revenue (LPs) and swap fees are separate ledgers and never route
+            through here.
           </p>
         </div>
       ) : (
