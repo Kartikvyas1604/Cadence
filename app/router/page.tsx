@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SiteFooter } from "@/components/site-footer";
-import { RouterView } from "@/components/router-view";
+import { RouterView } from "@/components/router/router-view-live";
 
 export const metadata: Metadata = {
   title: "Router — Cadence",
