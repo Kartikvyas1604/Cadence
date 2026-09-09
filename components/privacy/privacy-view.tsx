@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Panel } from "@/components/panel";
 import { PrivateIntentPanel } from "@/components/private-intent-panel";
-import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
+import { useCadence } from "@/lib/cadence/provider";
+import { publicClientFor } from "@/lib/cadence/contract";
+import { createEphemeral, fundEphemeral, walletFromProvider, type StealthSession } from "@/lib/stealth";
+import { fmtEth } from "@/lib/cadence/format";
+import { formatUnits } from "viem";
 
 /**
  * Privacy page (Extended §§3/5/7): Private Cadence Intent (beat #2),
@@ -37,9 +41,53 @@ export function PrivacyView() {
   );
 }
 
-/** Extended §5 — stealth / ephemeral payer: one-shot key, fund, mint, sweep. */
+/** Extended §5 — stealth / ephemeral payer: one-shot key, fund, commit, sweep. */
 function StealthWalletPanel({ className = "" }: { className?: string }) {
-  const [ephemeral, setEphemeral] = useState<{ address: string } | null>(null);
+  const s = useCadence();
+  const [session, setSession] = useState<StealthSession | null>(null);
+  const [balance, setBalance] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const refreshBalance = useCallback(async () => {
+    if (!session || s.chain.chainId == null) return;
+    const pc = publicClientFor(s.chain.chainId);
+    try {
+      const wei = (await pc.getBalance({
+        address: session.account.address as `0x${string}`,
+      })) as bigint;
+      setBalance(fmtEth(Number(formatUnits(wei, 18)), 4));
+    } catch {
+      setBalance(null);
+    }
+  }, [session, s.chain.chainId]);
+
+  useEffect(() => {
+    void refreshBalance();
+  }, [refreshBalance]);
+
+  async function fund(amount: string) {
+    if (!session) return;
+    setError(null);
+    setNote(null);
+    const provider = (window as unknown as { ethereum: unknown }).ethereum;
+    const funder = walletFromProvider(provider);
+    if (!funder) {
+      setError("No injected wallet found — connect first to fund.");
+      return;
+    }
+    if (!s.chain.chainId) {
+      setError("Connect to a chain with a deployment first.");
+      return;
+    }
+    try {
+      await fundEphemeral(funder, session, amount);
+      setNote(`Funded with ${amount} ETH.`);
+      void refreshBalance();
+    } catch (e) {
+      setError(e instanceof Error ? e.message.slice(0, 140) : "fund failed");
+    }
+  }
 
   return (
     <Panel
@@ -50,31 +98,53 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
       className={className}
     >
       <div className="flex flex-1 flex-col gap-4">
-        {ephemeral ? (
+        {session ? (
           <>
             <div>
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted">
                 ephemeral address
               </p>
               <p className="mt-1 break-all font-mono text-sm tabular-nums text-accent-strong">
-                {ephemeral.address}
+                {session.account.address}
+              </p>
+              <p className="mt-1 font-mono text-xs tabular-nums text-muted">
+                balance {balance ?? "—"} ETH
               </p>
             </div>
-            <LpNotice kind="warn">
-              Fund this address with enough ETH to cover the slot ask, then
-              commit from it. The key lives in this tab only — never persisted.
-            </LpNotice>
+            <div className="flex flex-wrap gap-2">
+              {["0.01", "0.05"].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => void fund(v)}
+                  className="h-11 rounded-md border border-border-strong px-4 font-mono text-xs tabular-nums text-foreground transition-colors duration-100 hover:border-accent hover:text-accent-strong"
+                >
+                  fund {v} ETH
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setSession(null);
+                  setBalance(null);
+                  setNote(null);
+                  setError(null);
+                }}
+                className="h-11 rounded-md border border-border px-4 text-sm text-muted transition-colors duration-100 hover:bg-surface-raised hover:text-danger"
+              >
+                discard
+              </button>
+            </div>
+            {note ? (
+              <LpNotice kind="success">{note}</LpNotice>
+            ) : null}
+            {error ? (
+              <LpNotice kind="error">{error}</LpNotice>
+            ) : null}
             <p className="text-xs leading-5 text-muted">
-              Fund, then commit-mint from the ephemeral account. Sweeping the
-              remainder back is optional and happens after the fill.
+              The key lives in this tab only — never persisted, no KYC. Fund it,
+              then commit-mint from the ephemeral account and sweep the rest.
             </p>
-            <button
-              type="button"
-              onClick={() => setEphemeral(null)}
-              className="h-11 rounded-md border border-border-strong px-5 text-sm text-foreground transition-colors duration-100 hover:bg-surface-raised"
-            >
-              discard this wallet
-            </button>
           </>
         ) : (
           <>
@@ -85,10 +155,7 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
             </p>
             <button
               type="button"
-              onClick={() => {
-                const acct = privateKeyToAccount(generatePrivateKey());
-                setEphemeral({ address: acct.address });
-              }}
+              onClick={() => setSession(createEphemeral())}
               className="inline-flex h-11 min-w-40 items-center justify-center rounded-md bg-accent px-5 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px"
             >
               create ephemeral wallet
