@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CadenceLogo } from "./logo";
 import { WalletButton } from "./wallet-button";
+import { NetworkSwitcher } from "./network-switcher";
 
 const NAV = [
   { href: "/console", label: "Console" },
@@ -50,7 +51,8 @@ export function SiteHeader() {
           </ul>
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <NetworkSwitcher />
           <WalletButton />
           <Link
             href="/console"
