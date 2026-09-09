@@ -33,8 +33,10 @@ export function useModuleProbeDetailed(
 
   useEffect(() => {
     if (chainId == null) {
-      setAvailable(null);
-      setReason(null);
+      queueMicrotask(() => {
+        setAvailable(null);
+        setReason(null);
+      });
       return;
     }
     let alive = true;
@@ -42,8 +44,10 @@ export function useModuleProbeDetailed(
       const d = await loadDeployment(chainId);
       if (!alive) return;
       if (!d) {
-        setAvailable(false);
-        setReason(`no deployment manifest served for chain ${chainId}`);
+        queueMicrotask(() => {
+          setAvailable(false);
+          setReason(`no deployment manifest served for chain ${chainId}`);
+        });
         return;
       }
       try {
@@ -60,8 +64,10 @@ export function useModuleProbeDetailed(
       } catch (e) {
         const msg = e instanceof Error ? e.message.slice(0, 120) : "unknown probe error";
         if (alive) {
-          setAvailable(false);
-          setReason(`${functionName} on ${pickAddress(d)} failed: ${msg}`);
+          queueMicrotask(() => {
+            setAvailable(false);
+            setReason(`${functionName} on ${pickAddress(d)} failed: ${msg}`);
+          });
           console.error("[cadence] probe failed:", msg);
         }
       }

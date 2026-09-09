@@ -63,7 +63,7 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
   }, [session, s.chain.chainId]);
 
   useEffect(() => {
-    void refreshBalance();
+    queueMicrotask(() => void refreshBalance());
   }, [refreshBalance]);
 
   async function fund(amount: string) {

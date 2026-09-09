@@ -56,7 +56,7 @@ export function ClobView() {
     const d = await loadDeployment(s.chain.chainId);
     if (!d?.clob) return;
     const pc = publicClientFor(s.chain.chainId);
-    setLoading(true);
+    queueMicrotask(() => setLoading(true));
     try {
       const epoch = Number((await pc.readContract({ address: d.clob, abi: clobAbiSafe(), functionName: "currentEpoch" })) as bigint);
       const ids = (await pc.readContract({
@@ -95,7 +95,7 @@ export function ClobView() {
   }, [s.chain.chainId, s.chain.blockNumber]);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => void refresh());
   }, [refresh]);
 
   const mine = s.wallet.address ? orders.filter((o) => o.maker.toLowerCase() === s.wallet.address?.toLowerCase()) : [];

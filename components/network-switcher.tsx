@@ -16,6 +16,9 @@ interface NetworkOption {
 }
 
 const CHAIN_KEY = "cadence:chain";
+// per-PAGE-LOAD flag (module scope): sessionStorage survives hard refreshes,
+// which would permanently disable the auto-restore after the first run
+let autoSwitchTried = false;
 
 const NETWORKS: NetworkOption[] = [
   {
@@ -85,9 +88,8 @@ export function NetworkSwitcher() {
   useEffect(() => {
     if (wallet.chainId == null || !wallet.address) return;
     const stored = Number(window.localStorage.getItem(CHAIN_KEY) ?? 0);
-    const flag = `cadence:autoswitch:${wallet.chainId}`;
-    if (!stored || stored === wallet.chainId || window.sessionStorage.getItem(flag)) return;
-    window.sessionStorage.setItem(flag, "1");
+    if (!stored || stored === wallet.chainId || autoSwitchTried) return;
+    autoSwitchTried = true;
     const net = NETWORKS.find((n) => n.chainId === stored);
     if (net) void pick(net);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,7 +178,8 @@ export function NetworkSwitcher() {
       <button
         type="button"
         onClick={() => {
-          setCursor(NETWORKS.findIndex((n) => n.chainId === wallet.chainId) || 0);
+          const idx = NETWORKS.findIndex((n) => n.chainId === wallet.chainId);
+          queueMicrotask(() => setCursor(idx >= 0 ? idx : 0));
           setOpen((v) => !v);
         }}
         aria-expanded={open}

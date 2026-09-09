@@ -5,7 +5,7 @@ import { formatUnits, parseUnits } from "viem";
 import { ArrowRight, Globe, Zap } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { EthIcon } from "@/components/eth-icon";
-import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
+import { useCadence } from "@/lib/cadence/provider";
 import { useModuleProbe } from "@/lib/cadence/use-module-probe";
 import { loadDeployment, routerRegistryAbi } from "@/lib/cadence/abis";
 import { publicClientFor, walletClientFor } from "@/lib/cadence/contract";
@@ -44,11 +44,11 @@ export function RouterView() {
   // live quotes on every intent change (debounced) + on new blocks
   useEffect(() => {
     if (wired !== true || s.chain.chainId == null || size === 0) {
-      setRows([]);
+      queueMicrotask(() => setRows([]));
       return;
     }
     let alive = true;
-    setLoading(true);
+    queueMicrotask(() => setLoading(true));
     const timer = setTimeout(() => {
       void (async () => {
         const d = await loadDeployment(s.chain.chainId as number);
