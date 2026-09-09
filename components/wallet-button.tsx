@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Copy, LogOut, Wallet } from "lucide-react";
 import {
-  chainLabel,
   shortAddress,
   useInjectedWallet,
 } from "@/lib/wallet/use-injected-wallet";
@@ -82,9 +81,6 @@ export function WalletButton() {
             }`}
           />
           {wallet.ethBalance !== null ? `${wallet.ethBalance.toFixed(4)} ETH` : "—"}
-        </span>
-        <span className="hidden font-mono text-[10px] uppercase tracking-widest text-muted sm:inline">
-          {chainLabel(wallet.chainId)}
         </span>
         <span className="font-mono text-xs tabular-nums text-foreground">
           {shortAddress(address)}

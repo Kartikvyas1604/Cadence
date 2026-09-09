@@ -55,8 +55,8 @@ export function SiteHeader() {
           <NetworkSwitcher />
           <WalletButton />
           <Link
-            href="/console"
-            className="hidden h-10 items-center rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px sm:inline-flex"
+            href="/buy"
+            className="hidden h-10 items-center whitespace-nowrap rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px sm:inline-flex"
           >
             Buy a slot
           </Link>
