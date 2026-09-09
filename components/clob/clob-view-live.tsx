@@ -172,11 +172,13 @@ function Unwired({ label }: { label: string }) {
 }
 
 function OrderBookPanel({
+  className = "",
   orders,
   loading,
   wired,
   epochId,
 }: {
+  className?: string;
   orders: OrderRow[];
   loading: boolean;
   wired: boolean | null;
