@@ -8,10 +8,63 @@ import {
   useInjectedWallet,
 } from "@/lib/wallet/use-injected-wallet";
 
+interface NetworkOption {
+  name: string;
+  chainId: number;
+  rpc: string;
+  explorer: string;
+  currency: string;
+}
+
+const NETWORKS: NetworkOption[] = [
+  { name: "Ethereum Sepolia", chainId: 11155111, rpc: "https://ethereum-sepolia-rpc.publicnode.com", explorer: "https://sepolia.etherscan.io", currency: "ETH" },
+  { name: "Base Sepolia", chainId: 84532, rpc: "https://base-sepolia-rpc.publicnode.com", explorer: "https://sepolia.basescan.org", currency: "ETH" },
+  { name: "Ethereum", chainId: 1, rpc: "https://eth.llamarpc.com", explorer: "https://etherscan.io", currency: "ETH" },
+  { name: "Base", chainId: 8453, rpc: "https://base.llamarpc.com", explorer: "https://basescan.org", currency: "ETH" },
+];
+
+/** EIP-1193 switch with add-network fallback; returns an error message or null. */
+async function switchOrAdd(
+  provider: { request: (args: object) => Promise<unknown> } | null,
+  net: NetworkOption,
+): Promise<string | null> {
+  if (!provider) return "No injected wallet found.";
+  const hex = `0x${net.chainId.toString(16)}`;
+  try {
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+    return null;
+  } catch {
+    try {
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: hex,
+            chainName: net.name,
+            rpcUrls: [net.rpc],
+            blockExplorerUrls: [net.explorer],
+            nativeCurrency: { name: net.currency, symbol: net.currency, decimals: 18 },
+          },
+        ],
+      });
+      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message.slice(0, 140) : "switch rejected";
+    }
+  }
+}
+
+function getProvider() {
+  return (window as unknown as { ethereum?: { request: (args: object) => Promise<unknown> } }).ethereum ?? null;
+}
+
 export function WalletButton() {
   const wallet = useInjectedWallet();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [busyChain, setBusyChain] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -29,6 +82,22 @@ export function WalletButton() {
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  async function pick(net: NetworkOption) {
+    if (wallet.chainId === net.chainId) {
+      setOpen(false);
+      return;
+    }
+    setBusyChain(net.chainId);
+    setError(null);
+    const err = await switchOrAdd(getProvider(), net);
+    setBusyChain(null);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setOpen(false);
+  }
 
   if (!wallet.available) {
     return (
@@ -60,6 +129,7 @@ export function WalletButton() {
   }
 
   const address = wallet.address;
+  const liveDeployments = NETWORKS.slice(0, 2); // Sepolia + Base Sepolia
 
   return (
     <div className="relative" ref={menuRef}>
@@ -73,11 +143,14 @@ export function WalletButton() {
         <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums text-muted">
           <span
             aria-hidden
-            className="size-1.5 rounded-full bg-success"
+            className={`size-1.5 rounded-full ${
+              wallet.chainId === 11155111 || wallet.chainId === 84532 ? "bg-success" : "bg-danger"
+            }`}
           />
-          {wallet.ethBalance !== null
-            ? `${wallet.ethBalance.toFixed(4)} ETH`
-            : chainLabel(wallet.chainId)}
+          {wallet.ethBalance !== null ? `${wallet.ethBalance.toFixed(4)} ETH` : "—"}
+        </span>
+        <span className="hidden font-mono text-[10px] uppercase tracking-widest text-muted sm:inline">
+          {chainLabel(wallet.chainId)}
         </span>
         <span className="font-mono text-xs tabular-nums text-foreground">
           {shortAddress(address)}
@@ -88,16 +161,59 @@ export function WalletButton() {
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-12 z-50 w-60 rounded-lg border border-border bg-surface p-1.5 shadow-xl shadow-black/40"
+          className="absolute right-0 top-12 z-50 w-64 rounded-lg border border-border bg-surface p-1.5 shadow-xl shadow-black/40"
         >
           <div className="px-3 py-2">
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted">
-              {chainLabel(wallet.chainId)}
+              {chainLabel(wallet.chainId)} · chain {wallet.chainId ?? "—"}
             </p>
             <p className="mt-0.5 break-all font-mono text-[11px] leading-5 text-foreground">
               {address}
             </p>
           </div>
+
+          <p className="px-3 pb-1 pt-1 font-mono text-[10px] uppercase tracking-widest text-accent">
+            networks
+          </p>
+          {NETWORKS.map((net) => {
+            const current = wallet.chainId === net.chainId;
+            const hasVenue = net.chainId === 11155111 || net.chainId === 84532;
+            return (
+              <button
+                key={net.chainId}
+                type="button"
+                role="menuitem"
+                onClick={() => void pick(net)}
+                className="flex h-10 w-full items-center justify-between gap-2 rounded-md px-3 text-sm text-muted transition-colors duration-100 hover:bg-surface-raised hover:text-foreground"
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className={`size-1.5 rounded-full ${current ? "bg-success" : hasVenue ? "bg-accent" : "bg-border-strong"}`}
+                  />
+                  {net.name}
+                  {hasVenue ? (
+                    <span className="rounded border border-accent/50 px-1 font-mono text-[9px] uppercase text-accent-strong">
+                      cadence live
+                    </span>
+                  ) : null}
+                </span>
+                <span className="font-mono text-[10px] tabular-nums text-muted">
+                  {current ? "✓ on" : `#${net.chainId}`}
+                </span>
+              </button>
+            );
+          })}
+          {error ? (
+            <p
+              role="status"
+              className="mx-1 my-1 rounded-md border border-danger/50 bg-danger/5 px-2.5 py-1.5 text-[11px] leading-5 text-danger"
+            >
+              {error}
+            </p>
+          ) : null}
+
+          <div className="my-1 border-t border-border" />
           <button
             type="button"
             role="menuitem"
