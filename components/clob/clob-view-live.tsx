@@ -115,9 +115,9 @@ export function ClobView() {
         </p>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">
-          <OrderBookPanel orders={orders} loading={loading} wired={wired} epochId={s.chain.epochId} />
-          <PlaceOrderPanel wired={wired} onDone={() => void refresh()} />
-          <MyOrdersPanel mine={mine} wired={wired} pendingId={pendingId} onCancel={async (id) => {
+          <OrderBookPanel className="lg:col-span-1" orders={orders} loading={loading} wired={wired} epochId={s.chain.epochId} />
+          <PlaceOrderPanel className="lg:col-span-1" wired={wired} onDone={() => void refresh()} />
+          <MyOrdersPanel className="lg:col-span-1" mine={mine} wired={wired} pendingId={pendingId} onCancel={async (id) => {
             setPendingId(`c${id}`);
             try {
               const d = await loadDeployment(s.chain.chainId as number);
@@ -190,7 +190,7 @@ function OrderBookPanel({
       step="live"
       title="Order book"
       caption={`Current epoch — ${epochId != null ? `#${epochId}` : "—"}. Open orders only.`}
-      className=""
+      className={className}
     >
       {wired === true ? (
         <div className="flex flex-1 flex-col gap-4">

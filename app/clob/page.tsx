@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SiteFooter } from "@/components/site-footer";
-import { ClobView } from "@/components/clob/clob-view";
+import { ClobView } from "@/components/clob/clob-view-live";
 
 export const metadata: Metadata = {
   title: "Slot CLOB — Cadence",
