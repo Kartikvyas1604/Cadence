@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Copy, LogOut, Wallet } from "lucide-react";
 import {
+  chainLabel,
   shortAddress,
   useInjectedWallet,
 } from "@/lib/wallet/use-injected-wallet";
