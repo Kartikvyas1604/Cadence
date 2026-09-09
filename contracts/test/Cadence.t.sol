@@ -73,7 +73,15 @@ contract CadenceTest is Test {
         );
 
         bytes memory args = abi.encode(
-            manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN, SWAP_FEE_BPS, PROTOCOL_TAKE_BPS, address(this)
+            manager,
+            address(usdc),
+            slotsAddr,
+            routerAddr,
+            LAMBDA_BPS,
+            EPOCH_LEN,
+            SWAP_FEE_BPS,
+            PROTOCOL_TAKE_BPS,
+            address(this)
         );
         bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
         bytes32 salt;
@@ -91,7 +99,15 @@ contract CadenceTest is Test {
         router = new CadenceRouter{salt: bytes32(uint256(12))}(manager, address(usdc));
         require(address(router) == routerAddr, "router addr");
         hook = new CadenceHook{salt: salt}(
-            manager, address(usdc), slotsAddr, routerAddr, LAMBDA_BPS, EPOCH_LEN, SWAP_FEE_BPS, PROTOCOL_TAKE_BPS, address(this)
+            manager,
+            address(usdc),
+            slotsAddr,
+            routerAddr,
+            LAMBDA_BPS,
+            EPOCH_LEN,
+            SWAP_FEE_BPS,
+            PROTOCOL_TAKE_BPS,
+            address(this)
         );
         require(address(hook) == hookAddr, "hook addr");
 

@@ -63,8 +63,17 @@ contract CadenceLpTest is Test {
             )
         );
 
-        bytes memory args =
-            abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, SWAP_FEE_BPS, PROTOCOL_TAKE_BPS, address(this));
+        bytes memory args = abi.encode(
+            manager,
+            address(usdc),
+            slotsAddr,
+            routerAddr,
+            2000,
+            EPOCH_LEN,
+            SWAP_FEE_BPS,
+            PROTOCOL_TAKE_BPS,
+            address(this)
+        );
         bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
         bytes32 salt;
         address hookAddr;
@@ -79,7 +88,15 @@ contract CadenceLpTest is Test {
         slots = new CadenceSlots{salt: bytes32(uint256(11))}(PRICE_PER_ETH, PRICE_PER_ETH * 2, "", address(this));
         router = new CadenceRouter{salt: bytes32(uint256(12))}(manager, address(usdc));
         hook = new CadenceHook{salt: salt}(
-            manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, SWAP_FEE_BPS, PROTOCOL_TAKE_BPS, address(this)
+            manager,
+            address(usdc),
+            slotsAddr,
+            routerAddr,
+            2000,
+            EPOCH_LEN,
+            SWAP_FEE_BPS,
+            PROTOCOL_TAKE_BPS,
+            address(this)
         );
         slots.setHook(address(hook));
 
@@ -367,24 +384,48 @@ contract CadenceTakeRateTest is Test {
         usdc = new MockUSDC(address(this));
         bytes memory codeSlots =
             abi.encodePacked(type(CadenceSlots).creationCode, abi.encode(PRICE, PRICE * 2, "", address(this)));
-        address slotsAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(21)), keccak256(codeSlots))))));
-        bytes memory codeRouter =
-            abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
-        address routerAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(22)), keccak256(codeRouter))))));
-        bytes memory args = abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, TAKE, treasury);
+        address slotsAddr = address(
+            uint160(
+                uint256(
+                    keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(21)), keccak256(codeSlots)))
+                )
+            )
+        );
+        bytes memory codeRouter = abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
+        address routerAddr = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(22)), keccak256(codeRouter))
+                    )
+                )
+            )
+        );
+        bytes memory args =
+            abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, TAKE, treasury);
         bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
         bytes32 salt;
         address hookAddr;
         while (true) {
             salt = bytes32(vm.randomUint());
-            hookAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code))))));
+            hookAddr = address(
+                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code)))))
+            );
             if (uint160(hookAddr) & Hooks.ALL_HOOK_MASK == uint160(1 << 7 | 1 << 3)) break;
         }
         slots = new CadenceSlots{salt: bytes32(uint256(21))}(PRICE, PRICE * 2, "", address(this));
         CadenceRouter router = new CadenceRouter{salt: bytes32(uint256(22))}(manager, address(usdc));
-        hook = new CadenceHook{salt: salt}(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, TAKE, treasury);
+        hook = new CadenceHook{salt: salt}(
+            manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, TAKE, treasury
+        );
         slots.setHook(address(hook));
-        key = PoolKey({currency0: Currency.wrap(address(0)), currency1: Currency.wrap(address(usdc)), fee: 0, tickSpacing: 60, hooks: hook});
+        key = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: Currency.wrap(address(usdc)),
+            fee: 0,
+            tickSpacing: 60,
+            hooks: hook
+        });
         manager.initialize(key, TickMath.getSqrtPriceAtTick(0));
         usdc.transfer(address(this), 0);
         usdc.approve(address(hook), type(uint256).max);
@@ -401,7 +442,7 @@ contract CadenceTakeRateTest is Test {
         uint256 proceeds = (10e18 * PRICE) / 1e18; // 0.01 ETH
 
         // LP pool = 90% accrued pro-rata (single LP = 100% of pool)
-        (, , uint256 revLp, ,) = hook.lpPosition(lp);
+        (,, uint256 revLp,,) = hook.lpPosition(lp);
         assertEq(revLp, (proceeds * 9000) / 10_000);
         // protocol cut held on the hook
         assertEq(hook.accruedProtocolRevenue(), proceeds - (proceeds * 9000) / 10_000);

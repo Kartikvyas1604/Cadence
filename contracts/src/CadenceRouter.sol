@@ -23,7 +23,6 @@ import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155
  * pulled from the trader's approval during settlement.
  */
 contract CadenceRouter is IUnlockCallback, ERC1155Holder {
-
     using CurrencySettler for Currency;
     using BalanceDeltaLibrary for BalanceDelta;
 
@@ -96,7 +95,9 @@ contract CadenceRouter is IUnlockCallback, ERC1155Holder {
             hs[k] = row.hook;
             rem[k] = row.remaining;
             prices[k] = row.slotPrice;
-            unchecked { k++; }
+            unchecked {
+                k++;
+            }
         }
         return (_trim(ids, k), _trimAddrs(hs, k), _trim(rem, k), _trim(prices, k));
     }
@@ -123,17 +124,23 @@ contract CadenceRouter is IUnlockCallback, ERC1155Holder {
 
     function _trim(bytes32[] memory a, uint256 n) internal pure returns (bytes32[] memory out) {
         out = new bytes32[](n);
-        for (uint256 i = 0; i < n; i++) out[i] = a[i];
+        for (uint256 i = 0; i < n; i++) {
+            out[i] = a[i];
+        }
     }
 
     function _trimAddrs(address[] memory a, uint256 n) internal pure returns (address[] memory out) {
         out = new address[](n);
-        for (uint256 i = 0; i < n; i++) out[i] = a[i];
+        for (uint256 i = 0; i < n; i++) {
+            out[i] = a[i];
+        }
     }
 
     function _trim(uint256[] memory a, uint256 n) internal pure returns (uint256[] memory out) {
         out = new uint256[](n);
-        for (uint256 i = 0; i < n; i++) out[i] = a[i];
+        for (uint256 i = 0; i < n; i++) {
+            out[i] = a[i];
+        }
     }
 
     /// @notice §2: execute a route — mints the cadence slot if the trader
@@ -152,7 +159,8 @@ contract CadenceRouter is IUnlockCallback, ERC1155Holder {
             require(msg.value >= sizeEth + cost, "need size + slot cost");
             // mint lands on this router, then relays to the trader
             ICadenceSlotsLike(slotsAddr).mintPublic{value: cost}(sizeEth);
-            IERC1155Like(slotsAddr).safeTransferFrom(address(this), msg.sender, ICadenceSlotsLike(slotsAddr).currentEpoch(), sizeEth, "");
+            IERC1155Like(slotsAddr)
+                .safeTransferFrom(address(this), msg.sender, ICadenceSlotsLike(slotsAddr).currentEpoch(), sizeEth, "");
         } else {
             require(msg.value >= sizeEth, "need size");
         }

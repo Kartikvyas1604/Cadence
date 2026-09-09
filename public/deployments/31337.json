@@ -1,13 +1,14 @@
 {
+  "clob": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
   "epochLengthBlocks": 120,
-  "hook": "0x8268Aa6b251Cd00D810fF3eBC2AC647403Ff4088",
+  "hook": "0x8061Ca4a92572dD06531098b5fd6045773F60088",
   "lambdaBps": 2500,
   "poolManager": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   "pricePerEth": 1000000000000000,
-  "router": "0xfe3aAFe1b43Cf857Cc1aC3d16edcC6DE07499B6b",
+  "protocolTakeBps": 1000,
+  "router": "0x5eb2655c33b4FFb2e1FEc71d5C963Ae072310DB4",
   "seedBlock": 0,
-  "slotRevenueShareBps": 10000,
-  "slots": "0xec60dC674d9Ab05b1Cd27F7E13ad524415cD5F04",
+  "slots": "0xAED116bff549679f39Ec123b214A5674585c7f75",
   "swapFeeBps": 30,
   "usdc": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
 }

@@ -35,17 +35,33 @@ contract ClobTest is Test {
         usdc = new MockUSDC(address(this));
         bytes memory codeSlots =
             abi.encodePacked(type(CadenceSlots).creationCode, abi.encode(PRICE, PRICE * 2, "", address(this)));
-        address slotsAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(31)), keccak256(codeSlots))))));
-        bytes memory codeRouter =
-            abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
-        address routerAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(32)), keccak256(codeRouter))))));
-        bytes memory args = abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, 1000, address(this));
+        address slotsAddr = address(
+            uint160(
+                uint256(
+                    keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(31)), keccak256(codeSlots)))
+                )
+            )
+        );
+        bytes memory codeRouter = abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
+        address routerAddr = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(32)), keccak256(codeRouter))
+                    )
+                )
+            )
+        );
+        bytes memory args =
+            abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, 1000, address(this));
         bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
         bytes32 salt;
         address hookAddr;
         while (true) {
             salt = bytes32(vm.randomUint());
-            hookAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code))))));
+            hookAddr = address(
+                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code)))))
+            );
             if (uint160(hookAddr) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) break;
         }
         slots = new CadenceSlots{salt: bytes32(uint256(31))}(PRICE, PRICE * 2, "", address(this));
@@ -54,7 +70,13 @@ contract ClobTest is Test {
             manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, 1000, address(this)
         );
         slots.setHook(address(hook));
-        key = PoolKey({currency0: Currency.wrap(address(0)), currency1: Currency.wrap(address(usdc)), fee: 0, tickSpacing: 60, hooks: hook});
+        key = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: Currency.wrap(address(usdc)),
+            fee: 0,
+            tickSpacing: 60,
+            hooks: hook
+        });
         manager.initialize(key, TickMath.getSqrtPriceAtTick(0));
         usdc.approve(address(hook), type(uint256).max);
         hook.seedUsdc(3_000_000e18);
@@ -191,24 +213,48 @@ contract RouterRegistryTest is Test {
         usdc = new MockUSDC(address(this));
         bytes memory codeSlots =
             abi.encodePacked(type(CadenceSlots).creationCode, abi.encode(0.001e18, 0.002e18, "", address(this)));
-        address slotsAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(41)), keccak256(codeSlots))))));
-        bytes memory codeRouter =
-            abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
-        address routerAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(42)), keccak256(codeRouter))))));
-        bytes memory args = abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, 1000, address(this));
+        address slotsAddr = address(
+            uint160(
+                uint256(
+                    keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(41)), keccak256(codeSlots)))
+                )
+            )
+        );
+        bytes memory codeRouter = abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
+        address routerAddr = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(42)), keccak256(codeRouter))
+                    )
+                )
+            )
+        );
+        bytes memory args =
+            abi.encode(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, 1000, address(this));
         bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
         bytes32 salt;
         address hookAddr;
         while (true) {
             salt = bytes32(vm.randomUint());
-            hookAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code))))));
+            hookAddr = address(
+                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code)))))
+            );
             if (uint160(hookAddr) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) break;
         }
         slots = new CadenceSlots{salt: bytes32(uint256(41))}(0.001e18, 0.002e18, "", address(this));
         router = new CadenceRouter{salt: bytes32(uint256(42))}(manager, address(usdc));
-        hook = new CadenceHook{salt: salt}(manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, 1000, address(this));
+        hook = new CadenceHook{salt: salt}(
+            manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, 1000, address(this)
+        );
         slots.setHook(address(hook));
-        key = PoolKey({currency0: Currency.wrap(address(0)), currency1: Currency.wrap(address(usdc)), fee: 0, tickSpacing: 60, hooks: hook});
+        key = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: Currency.wrap(address(usdc)),
+            fee: 0,
+            tickSpacing: 60,
+            hooks: hook
+        });
         manager.initialize(key, TickMath.getSqrtPriceAtTick(0));
         usdc.approve(address(hook), type(uint256).max);
         hook.seedUsdc(3_000_000e18);
@@ -228,12 +274,18 @@ contract RouterRegistryTest is Test {
 
     function test_quoteSkipsPoolsTooSmall() public {
         router.registerPool(key);
-        (bytes32[] memory ids, , , ) = router.quoteRoute(1_000_000e18, true);
+        (bytes32[] memory ids,,,) = router.quoteRoute(1_000_000e18, true);
         assertEq(ids.length, 0, "pool cannot serve oversized intent");
     }
 
     function test_registerPoolRequiresCadenceHook() public {
-        PoolKey memory bad = PoolKey({currency0: Currency.wrap(address(0)), currency1: Currency.wrap(address(usdc)), fee: 0, tickSpacing: 60, hooks: IHooks(address(0xdead))});
+        PoolKey memory bad = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: Currency.wrap(address(usdc)),
+            fee: 0,
+            tickSpacing: 60,
+            hooks: IHooks(address(0xdead))
+        });
         vm.expectRevert();
         router.registerPool(bad);
     }

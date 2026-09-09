@@ -113,7 +113,7 @@ contract DeployCadence is Script {
         (address routerAddr, address slotsAddr) = _deploySlotsRouter(manager, usdcAddr, deployerOwner, p);
         saltHook = _mineHook(manager, usdcAddr, slotsAddr, routerAddr, p);
         address hookAddr = predict(CREATE2_FACTORY, saltHook, _hookCode(manager, usdcAddr, slotsAddr, routerAddr, p));
-        ctx = WireCtx(manager, usdcAddr, routerAddr, slotsAddr, address(0), address(0), deployerOwner, p);
+        ctx = WireCtx(manager, usdcAddr, routerAddr, slotsAddr, hookAddr, address(0), deployerOwner, p);
     }
 
     function _deploySlotsRouter(IPoolManager manager, address usdcAddr, address deployerOwner, DeployParams memory p)
@@ -145,7 +145,15 @@ contract DeployCadence is Script {
         return abi.encodePacked(
             type(CadenceHook).creationCode,
             abi.encode(
-                manager, usdcAddr, slotsAddr, routerAddr, p.lambda, p.epochLen, p.swapFeeBps, p.protocolTakeBps, p.protocolTreasury
+                manager,
+                usdcAddr,
+                slotsAddr,
+                routerAddr,
+                p.lambda,
+                p.epochLen,
+                p.swapFeeBps,
+                p.protocolTakeBps,
+                p.protocolTreasury
             )
         );
     }
@@ -191,7 +199,7 @@ contract DeployCadence is Script {
         });
 
         // §1 secondary CLOB + §2 register the default pool
-        Clob clob = new Clob(address(hook), IERC1155(ctx.usdc));
+        Clob clob = new Clob(address(hook), IERC1155(ctx.slots));
         ctx.clob = address(clob);
         console2.log("deployed clob", address(clob));
         CadenceRouter(ctx.router).registerPool(key);

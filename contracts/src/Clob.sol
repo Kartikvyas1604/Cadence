@@ -52,9 +52,18 @@ contract Clob is ERC1155Holder, ReentrancyGuard {
     error CrossMismatch();
     error EpochNotExpired();
 
-    event OrderPlaced(uint256 indexed id, address indexed maker, Side side, uint256 epochId, uint256 size, uint256 price);
+    event OrderPlaced(
+        uint256 indexed id, address indexed maker, Side side, uint256 epochId, uint256 size, uint256 price
+    );
     event OrderCanceled(uint256 indexed id, address indexed maker, uint256 refunded);
-    event ClobTrade(uint256 indexed buyId, uint256 indexed sellId, address indexed buyer, address seller, uint256 size, uint256 price);
+    event ClobTrade(
+        uint256 indexed buyId,
+        uint256 indexed sellId,
+        address indexed buyer,
+        address seller,
+        uint256 size,
+        uint256 price
+    );
     event OrdersExpired(uint256 indexed epochId, uint256 count);
 
     /// @notice Cadence hook — epoch clock + slots address.

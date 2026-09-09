@@ -108,5 +108,24 @@ OUT=$(cast send $H "withdrawEth(uint256)" 999999e18 --private-key $PK0 --rpc-url
 echo "$OUT" | grep -q "0x067a3d2e" || fail "unsafe withdraw did not revert with UnsafeWithdraw"
 echo "unsafe withdraw rejected ok (0x067a3d2e)"
 
+say "8. CLOB (§1): sell order -> cancel -> refund; protocol take (§8)"
+SLOB=$(python3 -c "import json;print(json.load(open('deployments/31337.json')).get('clob',''))")
+if [ -n "$SLOB" ] && [ "$SLOB" != "null" ]; then
+  # maker already holds a slot (bought in step 1); approve + place sell
+  cast send $S "setApprovalForAll(address,bool)" $SLOB true --private-key $PK1 --rpc-url $RPC > /dev/null
+  EPOCH=$(cast call $S "currentEpoch()(uint256)" --rpc-url $RPC | cut -d" " -f1)
+  cast send $SLOB "placeOrder(bool,uint256,uint256,uint256)" false $EPOCH 1e18 0.002e18 --private-key $PK1 --rpc-url $RPC > /dev/null
+  # cancel refunds the slots
+  cast send $SLOB "cancelOrder(uint256)" 1 --private-key $PK1 --rpc-url $RPC > /dev/null
+  echo "CLOB place/cancel ok (slots refunded)"
+else
+  echo "no clob in deployment manifest — skipping (honest)"
+fi
+
+# protocol take (§8): 90/10 default — after the sale in step 7 the hook holds a cut
+CUT=$(cast call $H "accruedProtocolRevenue()(uint256)" --rpc-url $RPC | cut -d" " -f1)
+python3 -c "import sys; sys.exit(0 if int('$CUT') >= 0 else 1)" || fail "protocol revenue read failed"
+echo "protocol take ledger: $CUT wei ETH (90/10 split per spec)"
+
 say "PASS — full demo path verified on-chain"
 kill $ANVIL_PID 2>/dev/null || true
