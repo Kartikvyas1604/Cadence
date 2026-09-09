@@ -54,8 +54,10 @@ function Unwired({ label }: { label: string }) {
     <div className="flex flex-1 flex-col items-start justify-center gap-2 py-6">
       <p className="font-mono text-xs uppercase tracking-widest text-muted">{label}</p>
       <p className="max-w-sm text-sm leading-6 text-muted">
-        The router registry (registerPool / quoteRoute / executeRoute) is not
-        deployed on this chain yet. Panels activate when Router.sol lands.
+        No Cadence deployment for this wallet&apos;s network. The registry is
+        live on <span className="font-mono text-foreground">Sepolia</span> and{" "}
+        <span className="font-mono text-foreground">Base Sepolia</span> —
+        switch chains in your wallet to route across pools.
       </p>
     </div>
   );

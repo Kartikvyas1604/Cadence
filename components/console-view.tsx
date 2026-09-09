@@ -32,10 +32,6 @@ function FactsCard({ className = "" }: { className?: string }) {
           </div>
         ))}
       </div>
-      <p className="mt-6 border-t border-border pt-4 text-xs leading-5 text-muted">
-        Explicitly not TAP / Dockyard / Parity. No fake APY. No finalist
-        guarantee.
-      </p>
     </section>
   );
 }

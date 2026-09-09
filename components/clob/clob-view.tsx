@@ -49,8 +49,10 @@ function Unwired({ label }: { label: string }) {
     <div className="flex flex-1 flex-col items-start justify-center gap-2 py-6">
       <p className="font-mono text-xs uppercase tracking-widest text-muted">{label}</p>
       <p className="max-w-sm text-sm leading-6 text-muted">
-        The CLOB module (place / cancel / match with epoch-cancel) is not
-        deployed on this chain yet. This panel activates when Clob.sol lands.
+        No Cadence deployment for this wallet&apos;s network. The venue is live
+        on <span className="font-mono text-foreground">Sepolia</span> and{" "}
+        <span className="font-mono text-foreground">Base Sepolia</span> —
+        switch chains in your wallet to trade slots on the CLOB.
       </p>
     </div>
   );
