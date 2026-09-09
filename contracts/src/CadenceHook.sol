@@ -360,6 +360,11 @@ contract CadenceHook is IHooks {
         return ((feeAccPerShare - feeCheckpoint[lp]) * sharesOf[lp]) / 1e18;
     }
 
+    /// @notice Remaining sellable capacity this epoch: budget - sold.
+    function remainingCapacity() external view returns (uint256) {
+        return epochCapacityEth[currentEpoch()] - _soldCapacityEth();
+    }
+
     /// @notice Capacity sold this epoch (public mints + live commitments), ETH.
     function soldCapacityEth() public view returns (uint256) {
         return _soldCapacityEth();

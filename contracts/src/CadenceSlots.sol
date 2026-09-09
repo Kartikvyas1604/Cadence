@@ -182,7 +182,7 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
 
         mintedCapacity[epochId] += size;
         _mint(msg.sender, epochId, size, "");
-        Address.sendValue(payable(msg.sender), msg.value - cost);
+        if (msg.value > cost) Address.sendValue(payable(msg.sender), msg.value - cost);
         // sale proceeds flow to the hook — LP slot revenue (≠ swap fees)
         Address.sendValue(payable(hook), cost);
 
@@ -245,7 +245,7 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
         // the sale completes at reveal: the consumed size counts against the
         // epoch budget (same ledger as public mints)
         mintedCapacity[epochId] += size;
-        Address.sendValue(payable(trader), c.escrow - cost);
+        if (c.escrow > cost) Address.sendValue(payable(trader), c.escrow - cost);
         Address.sendValue(payable(hook), cost);
         emit SlotRevealed(epochId, H, trader, size, cost);
         return size;
