@@ -6,7 +6,7 @@ import { ArrowRight, Lock } from "lucide-react";
 import { IntelPanel } from "./intel-panel";
 import { EthIcon } from "./eth-icon";
 import { Panel } from "./panel";
-import { useCadence } from "@/lib/cadence/provider";
+import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
 import { useModuleProbe } from "@/lib/cadence/use-module-probe";
 import { adminAbi } from "@/lib/cadence/abis";
 import { fmtPricePerEth } from "@/lib/cadence/format";
@@ -233,6 +233,8 @@ function DynamicPricePanel({
   wired: boolean | null;
 }) {
   const s = useCadence();
+  const { applyAsk } = useCadenceActions();
+  const [pending, setPending] = useState(false);
   const suggested = s.intel?.suggestedAskPerEth ?? null;
   const onchain = s.slotPricePerEth;
 
@@ -262,15 +264,26 @@ function DynamicPricePanel({
       </dl>
       <button
         type="button"
-        disabled
-        className="mt-4 inline-flex h-11 min-w-32 items-center justify-center rounded-md border border-border-strong bg-surface-raised px-5 text-sm font-medium text-foreground opacity-40"
+        disabled={!suggested || !s.wallet.address || pending}
+        onClick={async () => {
+          if (suggested == null) return;
+          setPending(true);
+          try {
+            await applyAsk(suggested);
+          } finally {
+            setPending(false);
+          }
+        }}
+        className="mt-4 inline-flex h-11 min-w-32 items-center justify-center rounded-md border border-border-strong bg-surface-raised px-5 text-sm font-medium text-foreground transition-colors duration-100 hover:bg-accent/10 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
       >
-        apply ask
+        {pending ? "applying…" : "apply ask"}
       </button>
       <p className="mt-3 text-xs leading-5 text-muted">
         {wired === false
           ? "setSlotPriceFromIntel is not on this deployment yet — the ask stays at the deploy default until it lands."
-          : "Apply is keeper/authorized. Intel never silently mutates pool config."}
+          : !s.wallet.address
+            ? "Connect the authorized keeper/deployer wallet to apply."
+            : "Apply is keeper/authorized and bounded 50–200%. Intel never silently mutates pool config."}
       </p>
     </Panel>
   );

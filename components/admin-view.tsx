@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatUnits, parseUnits } from "viem";
 import { Panel } from "@/components/panel";
 import { EthIcon } from "@/components/eth-icon";
 import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
@@ -17,6 +16,7 @@ import { fmtEth } from "@/lib/cadence/format";
  */
 export function AdminView() {
   const s = useCadence();
+  const { withdrawProtocolRevenue } = useCadenceActions();
   const wired = useModuleProbe(s.chain.chainId, (d) => d.hook, adminAbi, "accruedProtocolRevenue");
 
   return (
@@ -57,6 +57,8 @@ function TreasuryPanel({
   wired: boolean | null;
 }) {
   const s = useCadence();
+  const { withdrawProtocolRevenue } = useCadenceActions();
+  const [pending, setPending] = useState(false);
   const [accrued, setAccrued] = useState<number | null>(null);
   const [treasury, setTreasury] = useState<string | null>(null);
 
@@ -117,10 +119,18 @@ function TreasuryPanel({
           </div>
           <button
             type="button"
-            disabled
-            className="inline-flex h-11 min-w-44 items-center justify-center self-start rounded-md border border-border-strong bg-surface-raised px-5 text-sm font-medium text-foreground opacity-40"
+            disabled={!s.wallet.address || pending}
+            onClick={async () => {
+              setPending(true);
+              try {
+                await withdrawProtocolRevenue();
+              } finally {
+                setPending(false);
+              }
+            }}
+            className="inline-flex h-11 min-w-44 items-center justify-center self-start rounded-md border border-border-strong bg-surface-raised px-5 text-sm font-medium text-foreground transition-colors duration-100 hover:bg-accent/10 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
           >
-            withdraw to treasury
+            {pending ? "withdrawing…" : "withdraw to treasury"}
           </button>
           <p className="text-xs leading-5 text-muted">
             Withdraw is treasury-only. Slot revenue (LPs) and swap fees are

@@ -12,6 +12,9 @@ import {MockUSDC} from "../src/mocks/MockUSDC.sol";
 import {CadenceSlots} from "../src/CadenceSlots.sol";
 import {CadenceHook} from "../src/CadenceHook.sol";
 import {CadenceRouter} from "../src/CadenceRouter.sol";
+import {Clob} from "../src/Clob.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import {Clob} from "../src/Clob.sol";
 
 /**
  * @title Deploy Cadence
@@ -55,6 +58,7 @@ contract DeployCadence is Script {
         address router;
         address slots;
         address hook;
+        address clob;
         address deployer;
         DeployParams p;
     }
@@ -109,7 +113,7 @@ contract DeployCadence is Script {
         (address routerAddr, address slotsAddr) = _deploySlotsRouter(manager, usdcAddr, deployerOwner, p);
         saltHook = _mineHook(manager, usdcAddr, slotsAddr, routerAddr, p);
         address hookAddr = predict(CREATE2_FACTORY, saltHook, _hookCode(manager, usdcAddr, slotsAddr, routerAddr, p));
-        ctx = WireCtx(manager, usdcAddr, routerAddr, slotsAddr, hookAddr, deployerOwner, p);
+        ctx = WireCtx(manager, usdcAddr, routerAddr, slotsAddr, address(0), address(0), deployerOwner, p);
     }
 
     function _deploySlotsRouter(IPoolManager manager, address usdcAddr, address deployerOwner, DeployParams memory p)
@@ -185,6 +189,12 @@ contract DeployCadence is Script {
             tickSpacing: 60,
             hooks: hook
         });
+
+        // §1 secondary CLOB + §2 register the default pool
+        Clob clob = new Clob(address(hook), IERC1155(ctx.usdc));
+        ctx.clob = address(clob);
+        console2.log("deployed clob", address(clob));
+        CadenceRouter(ctx.router).registerPool(key);
         ctx.manager.initialize(key, TickMath.getSqrtPriceAtTick(0));
 
         // bootstrap: quote-token seed (protocol-owned) + the deployer as the
@@ -206,6 +216,7 @@ contract DeployCadence is Script {
         vm.serializeAddress(json, "slots", ctx.slots);
         vm.serializeAddress(json, "hook", hook);
         vm.serializeAddress(json, "router", ctx.router);
+        vm.serializeAddress(json, "clob", ctx.clob);
         vm.serializeUint(json, "lambdaBps", ctx.p.lambda);
         vm.serializeUint(json, "epochLengthBlocks", ctx.p.epochLen);
         vm.serializeUint(json, "pricePerEth", ctx.p.pricePerEth);

@@ -15,7 +15,7 @@ import { fmtEth } from "@/lib/cadence/format";
  */
 export function ClobView() {
   const s = useCadence();
-  const available = useModuleProbe(s.chain.chainId, (d) => d.hook, clobAbi, "nextOrderId");
+  const available = useModuleProbe(s.chain.chainId, (d) => d.clob ?? d.hook, clobAbi, "nextOrderId");
 
   return (
     <main className="flex-1">

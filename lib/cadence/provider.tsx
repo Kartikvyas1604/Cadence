@@ -23,10 +23,12 @@ import {
   hookAbi,
   routerAbi,
   lpModuleAbi,
+  adminAbi,
   poolKey,
   type CadenceDeployment,
 } from "./abis";
 import { decodeWrappedInner, publicClientFor, walletClientFor, REVERT_SELECTORS } from "./contract";
+import { keccak256, toHex } from "viem";
 
 const StateContext = createContext<WorldState | null>(null);
 const ActionsContext = createContext<{
@@ -40,6 +42,8 @@ const ActionsContext = createContext<{
   refreshIntel: () => Promise<boolean>;
   depositLpEth: (sizeEth: number) => Promise<void>;
   withdrawLpEth: (sharesEth: number) => Promise<void>;
+  applyAsk: (askEth: number) => Promise<void>;
+  withdrawProtocolRevenue: () => Promise<void>;
 } | null>(null);
 
 interface CommitmentLocal {
@@ -577,6 +581,56 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     [requireReady, sendTx],
   );
 
+  /** §4: push the paid-intel ask onchain — owner/keeper only, bounded on-chain. */
+  const applyAsk = useCallback(
+    async (askEth: number) => {
+      const ctx = requireReady();
+      if (!ctx) return;
+      const { pc, wc, d } = ctx;
+      const askWei = parseUnits(String(askEth), 18);
+      // x402 payment proof: keccak of the stored quote payload (server
+      // returns the paid quote; its hash binds the ask to the receipt)
+      const quote = stateRef.current.intel;
+      const payload = JSON.stringify(quote ?? { asOf: 0 });
+      const receiptHash = keccak256(toHex(payload)) as `0x${string}`;
+      await sendTx(
+        () =>
+          wc.writeContract({
+            address: d.slots,
+            abi: adminAbi,
+            functionName: "setSlotPriceFromIntel",
+            args: [askWei, receiptHash],
+            account: ctx.s.wallet.address as `0x${string}`,
+            chain: null,
+          }),
+        pc,
+        askEth,
+      );
+      // the written ask lands via POOL_SYNC on the next block poll
+    },
+    [requireReady, sendTx],
+  );
+
+  /** §8: withdraw the accrued protocol take to the treasury. */
+  const withdrawProtocolRevenue = useCallback(async () => {
+    const ctx = requireReady();
+    if (!ctx) return;
+    const { pc, wc, d } = ctx;
+    await sendTx(
+      () =>
+        wc.writeContract({
+          address: d.hook,
+          abi: adminAbi,
+          functionName: "withdrawProtocolRevenue",
+          args: [ctx.s.wallet.address as `0x${string}`],
+          account: ctx.s.wallet.address as `0x${string}`,
+          chain: null,
+        }),
+      pc,
+      0,
+    );
+  }, [requireReady, sendTx]);
+
   const refreshIntel = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch("/api/intel", { method: "GET" });
@@ -614,8 +668,10 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       refreshIntel,
       depositLpEth,
       withdrawLpEth,
+      applyAsk,
+      withdrawProtocolRevenue,
     }),
-    [buySlot, commitMint, attemptSwap, attemptBadReveal, refreshIntel, depositLpEth, withdrawLpEth],
+    [buySlot, commitMint, attemptSwap, attemptBadReveal, refreshIntel, depositLpEth, withdrawLpEth, applyAsk, withdrawProtocolRevenue],
   );
 
   return (

@@ -6,6 +6,7 @@ export interface CadenceDeployment {
   slots: `0x${string}`;
   hook: `0x${string}`;
   router: `0x${string}`;
+  clob?: `0x${string}`;
   lambdaBps: number;
   epochLengthBlocks: number;
   pricePerEth: string;
@@ -25,6 +26,7 @@ export async function loadDeployment(chainId: number): Promise<CadenceDeployment
       slots: raw.slots as `0x${string}`,
       hook: raw.hook as `0x${string}`,
       router: raw.router as `0x${string}`,
+      clob: typeof raw.clob === "string" ? (raw.clob as `0x${string}`) : undefined,
       lambdaBps: Number(raw.lambdaBps ?? 0),
       epochLengthBlocks: Number(raw.epochLengthBlocks ?? 0),
       pricePerEth: String(raw.pricePerEth ?? "0"),
