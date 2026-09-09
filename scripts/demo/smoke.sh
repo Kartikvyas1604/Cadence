@@ -27,6 +27,9 @@ export EPOCH_LENGTH=${EPOCH_LENGTH:-120}
 forge script script/DeployCadence.s.sol --rpc-url $RPC --broadcast --slow > /tmp/deploy-smoke.log 2>&1 \
   || fail "deploy failed (see /tmp/deploy-smoke.log)"
 
+cp deployments/31337.json ../public/deployments/31337.json
+echo "manifest copied to public/deployments/31337.json"
+
 S=$(python3 -c "import json;print(json.load(open('deployments/31337.json'))['slots'])")
 R=$(python3 -c "import json;print(json.load(open('deployments/31337.json'))['router'])")
 H=$(python3 -c "import json;print(json.load(open('deployments/31337.json'))['hook'])")
@@ -128,4 +131,7 @@ python3 -c "import sys; sys.exit(0 if int('$CUT') >= 0 else 1)" || fail "protoco
 echo "protocol take ledger: $CUT wei ETH (90/10 split per spec)"
 
 say "PASS — full demo path verified on-chain"
-kill $ANVIL_PID 2>/dev/null || true
+# keep the chain alive for the browser console (localhost:8545)
+echo ""
+echo "chain live at localhost:8545 — open http://localhost:3000/console and connect"
+echo "(stop it later: kill $ANVIL_PID)"

@@ -12,16 +12,9 @@ export function SiteFooter() {
             capacity, not LP equity. No APY is offered or implied.
           </p>
         </div>
-        <div className="space-y-2 break-words font-mono text-xs leading-5 text-muted">
-          <p className="uppercase tracking-widest text-foreground/80">
-            Explicitly not
-          </p>
-          <p>
-            ≠ TAP (no Aqua take-permit) · ≠ Dockyard (no fee desk) · ≠ Parity
-            (no peg desk)
-          </p>
-          <p>No secondary CLOB in MVP · No fake APY · No finalist guarantee</p>
-        </div>
+        <p className="text-sm leading-6 text-muted">
+          © {new Date().getFullYear()} Cadence. All rights reserved.
+        </p>
       </div>
     </footer>
   );

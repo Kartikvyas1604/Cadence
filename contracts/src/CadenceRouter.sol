@@ -69,6 +69,10 @@ contract CadenceRouter is IUnlockCallback, ERC1155Holder {
         emit PoolRegistered(poolId, address(key.hooks));
     }
 
+    function poolCount() external view returns (uint256) {
+        return registeredPools.length;
+    }
+
     /// @notice §2: quote every registered pool for this intent — remaining
     ///         capacity, slot price and the hook address. Never silent:
     ///         every row carries its poolId.

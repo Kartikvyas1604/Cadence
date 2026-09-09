@@ -163,13 +163,6 @@ export default function ProtocolPage() {
           </Section>
 
           <Section kicker="06 · what a slot is not" title="Honesty by design">
-            <p>
-              A slot is not LP equity, not a yield claim, and not a take-permit
-              against a named maker. Explicitly not TAP, not Dockyard, not
-              Parity. Unused slots expire worthless; active depth is capped at{" "}
-              <span className="font-mono text-foreground">λ × total</span>. No
-              fake APY. No finalist guarantee.
-            </p>
             <Link
               href="/console"
               className="mt-6 inline-flex h-12 items-center gap-2 rounded-md bg-accent px-6 font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px"

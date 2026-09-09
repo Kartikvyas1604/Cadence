@@ -39,7 +39,7 @@ contract DeployCadence is Script {
 
     uint256 constant LAMBDA_DEFAULT = 2500;
     uint256 constant EPOCH_DEFAULT = 12;
-    bytes32 constant PRICE_DEFAULT = bytes32(uint256(0.001e18));
+    uint256 constant PRICE_DEFAULT = 0.001e18;
 
     struct DeployParams {
         uint256 lambda;
@@ -72,9 +72,9 @@ contract DeployCadence is Script {
         DeployParams memory p = DeployParams({
             lambda: uint256(vm.envOr("LAMBDA_BPS", uint256(LAMBDA_DEFAULT))),
             epochLen: uint256(vm.envOr("EPOCH_LENGTH", uint256(EPOCH_DEFAULT))),
-            pricePerEth: uint256(vm.envOr("SLOT_PRICE_ETH", PRICE_DEFAULT)),
-            seedEthAmt: uint256(vm.envOr("SEED_ETH", bytes32(uint256(1000e18)))),
-            seedUsdcAmt: uint256(vm.envOr("SEED_USDC", bytes32(uint256(3_000_000e18)))),
+            pricePerEth: uint256(vm.envOr("SLOT_PRICE_ETH", uint256(PRICE_DEFAULT))),
+            seedEthAmt: uint256(vm.envOr("SEED_ETH", uint256(1000e18))),
+            seedUsdcAmt: uint256(vm.envOr("SEED_USDC", uint256(3_000_000e18))),
             swapFeeBps: uint256(vm.envOr("SWAP_FEE_BPS", uint256(30))),
             protocolTakeBps: uint256(vm.envOr("PROTOCOL_TAKE_BPS", uint256(1000))),
             protocolTreasury: deployer
@@ -121,7 +121,7 @@ contract DeployCadence is Script {
         returns (address routerAddr, address slotsAddr)
     {
         bytes memory codeRouter = abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, usdcAddr));
-        bytes32 saltRouter = keccak256("cadence.router.v1");
+        bytes32 saltRouter = keccak256("cadence.router.v2");
         routerAddr = predict(CREATE2_FACTORY, saltRouter, codeRouter);
         new CadenceRouter{salt: saltRouter}(manager, usdcAddr);
         console2.log("deployed router", routerAddr);
@@ -129,7 +129,7 @@ contract DeployCadence is Script {
         bytes memory codeSlots = abi.encodePacked(
             type(CadenceSlots).creationCode, abi.encode(p.pricePerEth, p.pricePerEth * 2, "", deployerOwner)
         );
-        bytes32 saltSlots = keccak256("cadence.slots.v1");
+        bytes32 saltSlots = keccak256("cadence.slots.v2");
         slotsAddr = predict(CREATE2_FACTORY, saltSlots, codeSlots);
         new CadenceSlots{salt: saltSlots}(p.pricePerEth, p.pricePerEth * 2, "", deployerOwner);
         console2.log("deployed slots", slotsAddr);
@@ -167,7 +167,7 @@ contract DeployCadence is Script {
     ) internal view returns (bytes32 saltHook) {
         bytes memory code = _hookCode(manager, usdcAddr, slotsAddr, routerAddr, p);
         for (uint256 i = 0;; i++) {
-            saltHook = keccak256(abi.encode("cadence.hook.v1", i));
+            saltHook = keccak256(abi.encode("cadence.hook.v2", i));
             if (uint160(predict(CREATE2_FACTORY, saltHook, code)) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) break;
             require(i < 5_000_000, "salt mining failed");
         }
