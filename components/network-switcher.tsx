@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+
 import { AlertTriangle, Check, ChevronDown, Globe } from "lucide-react";
 import { useInjectedWallet } from "@/lib/wallet/use-injected-wallet";
 
@@ -13,6 +14,8 @@ interface NetworkOption {
   venue: boolean;
   hue: string; // dot color
 }
+
+const CHAIN_KEY = "cadence:chain";
 
 const NETWORKS: NetworkOption[] = [
   {
@@ -75,6 +78,20 @@ export function NetworkSwitcher() {
   const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [cursor, setCursor] = useState(0);
+
+  // restore the user's previously chosen network after a hard refresh:
+  // wallets auto-reconnect to their default chain, so re-request the pick
+  // once per session (never loops — only fires when stored ≠ current)
+  useEffect(() => {
+    if (wallet.chainId == null || !wallet.address) return;
+    const stored = Number(window.localStorage.getItem(CHAIN_KEY) ?? 0);
+    const flag = `cadence:autoswitch:${wallet.chainId}`;
+    if (!stored || stored === wallet.chainId || window.sessionStorage.getItem(flag)) return;
+    window.sessionStorage.setItem(flag, "1");
+    const net = NETWORKS.find((n) => n.chainId === stored);
+    if (net) void pick(net);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet.chainId, wallet.address]);
 
   useEffect(() => {
     if (!open) return;
@@ -140,6 +157,7 @@ export function NetworkSwitcher() {
         });
         await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
       }
+      window.localStorage.setItem(CHAIN_KEY, String(net.chainId));
       setOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message.slice(0, 140) : "switch rejected");

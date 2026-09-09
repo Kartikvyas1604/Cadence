@@ -64,6 +64,7 @@ export function SwitchChainRow() {
           params: [{ chainId: `0x${net.chainId.toString(16)}` }],
         });
       }
+      window.localStorage.setItem("cadence:chain", String(net.chainId));
     } catch (e) {
       setError(e instanceof Error ? e.message.slice(0, 140) : "switch rejected");
     } finally {
