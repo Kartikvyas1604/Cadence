@@ -44,6 +44,7 @@ const ActionsContext = createContext<{
   withdrawLpEth: (sharesEth: number) => Promise<void>;
   applyAsk: (askEth: number) => Promise<void>;
   withdrawProtocolRevenue: () => Promise<void>;
+  setProtocolTreasury: (next: string) => Promise<void>;
 } | null>(null);
 
 interface CommitmentLocal {
@@ -611,6 +612,29 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     [requireReady, sendTx],
   );
 
+  /** §8: rotate the treasury role (current treasury only). */
+  const setProtocolTreasury = useCallback(
+    async (next: string) => {
+      const ctx = requireReady();
+      if (!ctx) return;
+      const { pc, wc, d } = ctx;
+      await sendTx(
+        () =>
+          wc.writeContract({
+            address: d.hook,
+            abi: adminAbi,
+            functionName: "setProtocolTreasury",
+            args: [next as `0x${string}`],
+            account: ctx.s.wallet.address as `0x${string}`,
+            chain: null,
+          }),
+        pc,
+        0,
+      );
+    },
+    [requireReady, sendTx],
+  );
+
   /** §8: withdraw the accrued protocol take to the treasury. */
   const withdrawProtocolRevenue = useCallback(async () => {
     const ctx = requireReady();
@@ -670,8 +694,9 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       withdrawLpEth,
       applyAsk,
       withdrawProtocolRevenue,
+      setProtocolTreasury,
     }),
-    [buySlot, commitMint, attemptSwap, attemptBadReveal, refreshIntel, depositLpEth, withdrawLpEth, applyAsk, withdrawProtocolRevenue],
+    [buySlot, commitMint, attemptSwap, attemptBadReveal, refreshIntel, depositLpEth, withdrawLpEth, applyAsk, withdrawProtocolRevenue, setProtocolTreasury],
   );
 
   return (

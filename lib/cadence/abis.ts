@@ -178,6 +178,7 @@ export const adminAbi = [
   { type: "function", name: "protocolTakeBps", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "accruedProtocolRevenue", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "withdrawProtocolRevenue", stateMutability: "nonpayable", inputs: [{ name: "to", type: "address" }], outputs: [] },
+  { type: "function", name: "setProtocolTreasury", stateMutability: "nonpayable", inputs: [{ name: "next", type: "address" }], outputs: [] },
   { type: "function", name: "slotPriceMin", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "slotPriceMax", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "lastIntelAsk", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
@@ -185,6 +186,7 @@ export const adminAbi = [
   { type: "function", name: "intelAttestationHash", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "bytes32" }] },
   { type: "function", name: "setSlotPriceFromIntel", stateMutability: "nonpayable", inputs: [{ name: "ask", type: "uint256" }, { name: "receiptHash", type: "bytes32" }], outputs: [] },
   { type: "event", name: "ProtocolRevenueWithdrawn", inputs: [{ name: "to", type: "address", indexed: true }, { name: "amount", type: "uint256", indexed: false }] },
+  { type: "event", name: "TreasuryUpdated", inputs: [{ name: "previous", type: "address", indexed: true }, { name: "current", type: "address", indexed: true }] },
   { type: "event", name: "SlotPriceUpdated", inputs: [{ name: "ask", type: "uint256", indexed: false }, { name: "receiptHash", type: "bytes32", indexed: false }] },
 ] as const;
 

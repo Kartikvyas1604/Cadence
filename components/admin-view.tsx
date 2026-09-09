@@ -58,10 +58,11 @@ function TreasuryPanel({
   wired: boolean | null;
 }) {
   const s = useCadence();
-  const { withdrawProtocolRevenue } = useCadenceActions();
+  const { withdrawProtocolRevenue, setProtocolTreasury } = useCadenceActions();
   const [pending, setPending] = useState(false);
   const [accrued, setAccrued] = useState<number | null>(null);
   const [treasury, setTreasury] = useState<string | null>(null);
+  const [nextTreasury, setNextTreasury] = useState("");
 
   const isTreasury =
     treasury != null &&
@@ -169,6 +170,46 @@ function TreasuryPanel({
           >
             {pending ? "withdrawing…" : "withdraw to treasury"}
           </button>
+          {isTreasury ? (
+            <div className="rounded-md border border-border bg-surface-raised p-4">
+              <label
+                htmlFor="next-treasury"
+                className="mb-2 block font-mono text-[11px] uppercase tracking-widest text-muted"
+              >
+                rotate treasury (current treasury only)
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  id="next-treasury"
+                  type="text"
+                  placeholder="0x…"
+                  autoComplete="off"
+                  value={nextTreasury}
+                  onChange={(e) => setNextTreasury(e.target.value)}
+                  className="h-11 min-w-56 flex-1 rounded-md border border-border-strong bg-surface px-3 font-mono text-xs tabular-nums text-foreground outline-none focus:border-accent"
+                />
+                <button
+                  type="button"
+                  disabled={!nextTreasury.startsWith("0x") || nextTreasury.length !== 42 || pending}
+                  onClick={async () => {
+                    setPending(true);
+                    try {
+                      await setProtocolTreasury(nextTreasury);
+                      setNextTreasury("");
+                    } finally {
+                      setPending(false);
+                    }
+                  }}
+                  className="h-11 rounded-md border border-border-strong bg-surface-raised px-4 text-sm text-foreground transition-colors duration-100 hover:bg-accent/10 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  transfer
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] leading-5 text-muted">
+                Production: assign a Safe multisig, never an EOA.
+              </p>
+            </div>
+          ) : null}
           <p className="text-xs leading-5 text-muted">
             Withdraw is treasury-only{isTreasury ? "" : " — connect the treasury wallet to enable"}. Slot
             revenue (LPs) and swap fees are separate ledgers and never route

@@ -152,7 +152,10 @@ contract CadenceHook is IHooks {
     /// @notice Protocol take of slot proceeds, in bps (default 1000 = 10%).
     uint256 public protocolTakeBps;
     /// @notice Treasury that withdraws the protocol take (immutable).
-    address public immutable protocolTreasury;
+    /// @notice Treasury that withdraws the protocol take. Rotatable by the
+    ///         current treasury (production: assign a multisig).
+    address public protocolTreasury;
+    event TreasuryUpdated(address indexed previous, address indexed current);
     /// @notice Protocol take accrued on-chain (ETH) — withdrawn via withdrawProtocolRevenue.
     uint256 public accruedProtocolRevenue;
 
@@ -332,6 +335,15 @@ contract CadenceHook is IHooks {
     /// @notice LP share of slot proceeds = 10000 - protocolTakeBps.
     function slotRevenueShareBps() public view returns (uint256) {
         return 10_000 - protocolTakeBps;
+    }
+
+    /// @notice Rotate the protocol take to a new treasury. Current treasury only.
+    function setProtocolTreasury(address next) external {
+        if (msg.sender != protocolTreasury) revert UnsafeWithdraw();
+        if (next == address(0)) revert ZeroSwap();
+        address previous = protocolTreasury;
+        protocolTreasury = next;
+        emit TreasuryUpdated(previous, next);
     }
 
     /// @notice Withdraw the accrued protocol take. Only the treasury itself.

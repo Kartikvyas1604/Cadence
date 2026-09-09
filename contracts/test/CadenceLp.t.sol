@@ -502,3 +502,27 @@ contract CadenceTakeRateTest is Test {
         assertEq(buyer.balance, 10_000e18 - cost);
     }
 }
+
+contract TreasuryRotationTest is CadenceTakeRateTest {
+    function test_treasuryRotation() public {
+        address newTreasury = makeAddr("newTreasury");
+        // only current treasury can rotate
+        vm.prank(buyer);
+        vm.expectRevert(CadenceHook.UnsafeWithdraw.selector);
+        hook.setProtocolTreasury(newTreasury);
+
+        vm.prank(treasury);
+        hook.setProtocolTreasury(newTreasury);
+        assertEq(hook.protocolTreasury(), newTreasury);
+
+        // accrued take withdraws to the NEW treasury now
+        vm.prank(buyer);
+        slots.mintPublic{value: (2e18 * PRICE) / 1e18 + 1 ether}(2e18);
+        uint256 cut = hook.accruedProtocolRevenue();
+        assertGt(cut, 0);
+        uint256 before = newTreasury.balance;
+        vm.prank(newTreasury);
+        hook.withdrawProtocolRevenue(newTreasury);
+        assertEq(newTreasury.balance - before, cut);
+    }
+}
