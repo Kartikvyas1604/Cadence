@@ -6,7 +6,7 @@ import { Check, Zap, X } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { EthIcon } from "@/components/eth-icon";
 import { useCadence } from "@/lib/cadence/provider";
-import { useModuleProbe } from "@/lib/cadence/use-module-probe";
+import { useModuleProbeDetailed } from "@/lib/cadence/use-module-probe";
 import { SwitchChainRow } from "@/components/switch-chain";
 import { loadDeployment, clobAbi, slotsAbi } from "@/lib/cadence/abis";
 import { publicClientFor, walletClientFor } from "@/lib/cadence/contract";
@@ -42,7 +42,8 @@ const STATUS_LABEL: Record<number, string> = {
 
 export function ClobView() {
   const s = useCadence();
-  const wired = useModuleProbe(s.chain.chainId, (d) => d.clob ?? d.hook, clobAbiSafe(), "nextOrderId");
+  const probe = useModuleProbeDetailed(s.chain.chainId, (d) => d.clob ?? d.hook, clobAbiSafe(), "nextOrderId");
+  const wired = probe.available;
 
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,9 +116,9 @@ export function ClobView() {
         </p>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">
-          <OrderBookPanel className="lg:col-span-1" orders={orders} loading={loading} wired={wired} epochId={s.chain.epochId} />
-          <PlaceOrderPanel className="lg:col-span-1" wired={wired} onDone={() => void refresh()} />
-          <MyOrdersPanel className="lg:col-span-1" mine={mine} wired={wired} pendingId={pendingId} onCancel={async (id) => {
+          <OrderBookPanel className="lg:col-span-1" orders={orders} loading={loading} wired={wired} epochId={s.chain.epochId} reason={probe.reason} />
+          <PlaceOrderPanel className="lg:col-span-1" wired={wired} onDone={() => void refresh()} reason={probe.reason} />
+          <MyOrdersPanel className="lg:col-span-1" mine={mine} wired={wired} pendingId={pendingId} reason={probe.reason} onCancel={async (id) => {
             setPendingId(`c${id}`);
             try {
               const d = await loadDeployment(s.chain.chainId as number);
@@ -146,7 +147,7 @@ export function ClobView() {
               setPendingId(null);
             }
           }} />
-          <FillsPanel wired={wired} chainId={s.chain.chainId} />
+          <FillsPanel wired={wired} chainId={s.chain.chainId} reason={probe.reason} />
           <ClobFactsPanel className="lg:col-span-1" />
         </div>
       </div>
@@ -158,7 +159,7 @@ function clobAbiSafe() {
   return clobAbi as unknown as import("viem").Abi;
 }
 
-function Unwired({ label }: { label: string }) {
+function Unwired({ label, reason }: { label: string; reason?: string | null }) {
   return (
     <div className="flex flex-1 flex-col items-start justify-center gap-3 py-6">
       <p className="font-mono text-xs uppercase tracking-widest text-muted">{label}</p>
@@ -167,6 +168,11 @@ function Unwired({ label }: { label: string }) {
         wallet with one click — the book activates the moment you land on it.
       </p>
       <SwitchChainRow />
+      {reason ? (
+        <p className="max-w-sm font-mono text-[10px] leading-5 text-muted">
+          diagnostic: {reason}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -177,12 +183,14 @@ function OrderBookPanel({
   loading,
   wired,
   epochId,
+  reason,
 }: {
   className?: string;
   orders: OrderRow[];
   loading: boolean;
   wired: boolean | null;
   epochId: number | null;
+  reason?: string | null;
 }) {
   const bids = orders.filter((o) => o.side === "buy" && o.status === 1).sort((a, b) => b.price - a.price);
   const asks = orders.filter((o) => o.side === "sell" && o.status === 1).sort((a, b) => a.price - b.price);
@@ -221,7 +229,7 @@ function OrderBookPanel({
           </div>
         </div>
       ) : (
-        <Unwired label={wired === false ? "CLOB not deployed yet" : "checking chain…"} />
+        <Unwired label={wired === false ? "CLOB not deployed yet" : "checking chain…"} reason={reason} />
       )}
     </Panel>
   );
@@ -244,10 +252,12 @@ function PlaceOrderPanel({
   className = "",
   wired,
   onDone,
+  reason,
 }: {
   className?: string;
   wired: boolean | null;
   onDone: () => void;
+  reason?: string | null;
 }) {
   const s = useCadence();
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -426,7 +436,7 @@ function PlaceOrderPanel({
           </p>
         </div>
       ) : (
-        <Unwired label={wired === false ? "CLOB not deployed yet" : "checking chain…"} />
+        <Unwired label={wired === false ? "CLOB not deployed yet" : "checking chain…"} reason={reason} />
       )}
     </Panel>
   );
@@ -438,12 +448,14 @@ function MyOrdersPanel({
   wired,
   onCancel,
   pendingId,
+  reason,
 }: {
   className?: string;
   mine: OrderRow[];
   wired: boolean | null;
   onCancel: (id: number) => Promise<void>;
   pendingId: string | null;
+  reason?: string | null;
 }) {
   return (
     <Panel
@@ -481,7 +493,7 @@ function MyOrdersPanel({
           </ul>
         )
       ) : (
-        <Unwired label={wired === false ? "CLOB not deployed yet" : "checking chain…"} />
+        <Unwired label={wired === false ? "CLOB not deployed yet" : "checking chain…"} reason={reason} />
       )}
     </Panel>
   );
@@ -491,10 +503,12 @@ function FillsPanel({
   className = "",
   wired,
   chainId,
+  reason,
 }: {
   className?: string;
   wired: boolean | null;
   chainId: number | null;
+  reason?: string | null;
 }) {
   const [fills, setFills] = useState<{ size: number; price: number; tx: `0x${string}`; block: number }[]>([]);
 
@@ -554,7 +568,7 @@ function FillsPanel({
       {wired === true ? (
         <FillList fills={fills} />
       ) : (
-        <Unwired label={wired === false ? "CLOB not deployed yet" : "checking chain…"} />
+        <Unwired label={wired === false ? "CLOB not deployed yet" : "checking chain…"} reason={reason} />
       )}
     </Panel>
   );
