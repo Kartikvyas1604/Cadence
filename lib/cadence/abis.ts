@@ -131,6 +131,7 @@ export const lpModuleAbi = [
  *         OrdersExpired(epochId)
  */
 export const clobAbi = [
+  { type: "function", name: "nextOrderId", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "placeOrder", stateMutability: "payable", inputs: [{ name: "side", type: "bool" }, { name: "epochId", type: "uint256" }, { name: "size", type: "uint256" }, { name: "price", type: "uint256" }], outputs: [{ name: "id", type: "uint256" }] },
   { type: "function", name: "cancelOrder", stateMutability: "nonpayable", inputs: [{ name: "orderId", type: "uint256" }], outputs: [] },
   { type: "function", name: "orders", stateMutability: "view", inputs: [{ name: "", type: "uint256" }], outputs: [{ name: "maker", type: "address" }, { name: "side", type: "bool" }, { name: "epochId", type: "uint256" }, { name: "size", type: "uint256" }, { name: "price", type: "uint256" }, { name: "filled", type: "uint256" }, { name: "status", type: "uint8" }] },
