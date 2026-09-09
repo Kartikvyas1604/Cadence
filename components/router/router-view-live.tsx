@@ -267,7 +267,8 @@ function IntentPanel({
         </div>
         {wired === true ? (
           <p className="text-xs leading-5 text-muted">
-            Quotes refresh automatically as blocks land.
+            Quotes refresh automatically as blocks land. Pick a pool in the
+            comparison table, then execute — one transaction.
           </p>
         ) : null}
       </div>
