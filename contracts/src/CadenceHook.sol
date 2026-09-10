@@ -47,6 +47,8 @@ contract CadenceHook is IHooks {
 
     /// @notice Trader holds no Cadence slot for the current epoch.
     error NoCadenceSlot();
+    /// @notice Trader holds a slot from a PAST epoch (expired — not current).
+    error EpochExpired();
     /// @notice Trade size exceeds the trader's Cadence slot capacity.
     error OversizeVsSlot();
     /// @notice Trade size exceeds the ACTIVE reserves for this epoch.
@@ -555,7 +557,14 @@ contract CadenceHook is IHooks {
             fromCommitment = true;
         } else {
             uint256 capacity = CadenceSlotsLike(slots).slotOf(trader);
-            if (capacity == 0) revert NoCadenceSlot();
+            if (capacity == 0) {
+                // M6: distinguish a PAST-epoch slot holder (expired) from a
+                // never-minted trader
+                uint256 prevEpoch = currentEpoch() > 0 ? currentEpoch() - 1 : 0;
+                if (CadenceSlotsLike(slots).balanceOf(trader, prevEpoch) > 0)
+                    revert EpochExpired();
+                revert NoCadenceSlot();
+            }
             if (capacity < sizeInEth) revert OversizeVsSlot();
             CadenceSlotsLike(slots).consume(trader, sizeInEth);
         }
@@ -733,4 +742,5 @@ interface CadenceSlotsLike {
     function revealAndConsume(address trader, uint256 size, bytes32 salt) external returns (uint256);
     function mintedCapacity(uint256 epochId) external view returns (uint256);
     function committedCapacity(uint256 epochId) external view returns (uint256);
+    function balanceOf(address owner, uint256 id) external view returns (uint256);
 }

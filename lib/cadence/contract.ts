@@ -50,6 +50,7 @@ export const REVERT_SELECTORS: Record<string, string> = {
   "0x5a1b39fc": "same-block-passive-unlock", // PassiveUnlock()
   "0x8ff14e0d": "bad-reveal", // BadReveal() (slots or hook)
   "0x067a3d2e": "unsafe-withdraw", // UnsafeWithdraw()
+  "0xf3708ccf": "epoch-expired", // EpochExpired()
   "0x90b8ab88": "insufficient-escrow", // InsufficientEscrow()
   "0x9ff41fe0": "capacity-exceeded", // CapacityExceeded()
   "0xc459d23f": "zero-size", // ZeroSize()

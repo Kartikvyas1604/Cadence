@@ -74,7 +74,9 @@ function rejectFromRevert(data: string | undefined): { reason: RejectReason; det
             ? "bad-reveal"
             : mapped === "unsafe-withdraw"
               ? "unsafe-withdraw"
-              : ("no-slot" as RejectReason);
+              : mapped === "epoch-expired"
+                ? "epoch-expired"
+                : ("no-slot" as RejectReason);
   const extra: Record<string, string> = {
     "oversize-active": "Trade size exceeds the epoch's ACTIVE reserves.",
     "insufficient-escrow": "Commitment escrow is below the mint cost for the revealed size.",

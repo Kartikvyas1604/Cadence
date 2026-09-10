@@ -208,6 +208,19 @@ contract CadenceTest is Test {
         assertWrapped(ret, CadenceHook.NoCadenceSlot.selector);
     }
 
+    function test_rejectEpochExpired() public {
+        // M6: a trader holding a slot from the PREVIOUS epoch gets the
+        // distinct EPOCH_EXPIRED code (not generic NO_SLOT)
+        uint256 size = 10e18;
+        buySlot(buyer, size);
+        vm.roll(block.number + EPOCH_LEN);
+        vm.startPrank(buyer);
+        (bool ok, bytes memory ret) = _rawSwap(buyer, abi.encodeCall(router.swap, (key, true, size)), size);
+        vm.stopPrank();
+        assertFalse(ok);
+        assertWrapped(ret, CadenceHook.EpochExpired.selector);
+    }
+
     function test_rejectOversizeVsSlot() public {
         uint256 size = 10e18;
         buySlot(buyer, size);
@@ -307,7 +320,7 @@ contract CadenceTest is Test {
         (bool ok, bytes memory ret) = _rawSwap(buyer, abi.encodeCall(router.swap, (key, true, size)), size);
         vm.stopPrank();
         assertFalse(ok);
-        assertWrapped(ret, CadenceHook.NoCadenceSlot.selector);
+        assertWrapped(ret, CadenceHook.EpochExpired.selector);
     }
 
     function test_epochRefreshRepartitions() public {

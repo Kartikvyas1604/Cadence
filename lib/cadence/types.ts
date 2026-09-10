@@ -3,7 +3,8 @@ export type RejectReason =
   | "oversize"
   | "same-block-passive-unlock"
   | "bad-reveal"
-  | "unsafe-withdraw";
+  | "unsafe-withdraw"
+  | "epoch-expired";
 
 export interface RejectReasonMeta {
   code: RejectReason;
@@ -40,6 +41,12 @@ export const REJECT_REASONS: Record<RejectReason, RejectReasonMeta> = {
     title: "Unsafe withdraw",
     detail:
       "withdraw reverted: it would orphan active capacity already sold this epoch.",
+  },
+  "epoch-expired": {
+    code: "epoch-expired",
+    title: "Epoch expired",
+    detail:
+      "slot id not current epoch — unused cadence slots expire worthless at refresh.",
   },
 };
 
