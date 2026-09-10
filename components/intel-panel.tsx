@@ -21,7 +21,7 @@ export function IntelPanel({ className = "" }: { className?: string }) {
     if (pending) return;
     setPending(true);
     try {
-      await refreshIntel();
+      await refreshIntel(); // provider handles POST + idempotency
     } finally {
       setPending(false);
     }

@@ -40,7 +40,7 @@ export function WalletButton() {
         href="https://metamask.io/download/"
         target="_blank"
         rel="noreferrer"
-        className="hidden h-10 items-center gap-2 rounded-md border border-border px-3.5 text-sm text-muted transition-colors duration-100 hover:border-border-strong hover:text-foreground md:inline-flex"
+        className="inline-flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted transition-colors duration-100 hover:border-border-strong hover:text-foreground"
       >
         <Wallet className="size-4" aria-hidden />
         Install a wallet
@@ -50,16 +50,23 @@ export function WalletButton() {
 
   if (!wallet.address) {
     return (
-      <button
-        type="button"
-        onClick={() => void wallet.connect()}
-        disabled={wallet.connecting}
-        aria-busy={wallet.connecting}
-        className="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px disabled:pointer-events-none disabled:opacity-60"
-      >
-        <Wallet className="size-4" aria-hidden />
-        {wallet.connecting ? "Connecting…" : "Connect wallet"}
-      </button>
+      <div className="flex flex-col items-end gap-1">
+        <button
+          type="button"
+          onClick={() => void wallet.connect()}
+          disabled={wallet.connecting}
+          aria-busy={wallet.connecting}
+          className="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px disabled:pointer-events-none disabled:opacity-60"
+        >
+          <Wallet className="size-4" aria-hidden />
+          {wallet.connecting ? "Connecting…" : "Connect wallet"}
+        </button>
+        {wallet.error ? (
+          <p role="alert" className="max-w-52 text-right font-mono text-[10px] leading-4 text-danger">
+            {wallet.error}
+          </p>
+        ) : null}
+      </div>
     );
   }
 

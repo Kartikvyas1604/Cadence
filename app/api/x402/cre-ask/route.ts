@@ -65,7 +65,7 @@ export async function GET(req: Request) {
         workflowId: ask.data.workflowId ?? "cre",
         source: "chainlink-cre",
         asOf: Date.now(),
-        paid: true,
+        paid: false, // H13: only CRE_API_KEY used — no x402 settlement performed
       },
       { headers: { "cache-control": "no-store", "x-request-id": id } },
     );

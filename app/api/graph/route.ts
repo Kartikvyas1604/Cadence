@@ -4,10 +4,18 @@ import { logRequest, rateLimit } from "@/lib/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-const QuerySchema = z.object({
-  query: z.string().min(1).max(8_000),
-  // paginate / order fields the panel is allowed to send
-  last: z.coerce.number().int().min(1).max(200).optional(),
+/** M2: allowlisted operations — client sends { op, last } not raw GraphQL */
+const OPERATIONS: Record<string, string> = {
+  mints: `{ cadenceMints(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId buyer size pricePaid blockNumber timestamp } }`,
+  commits: `{ cadenceCommits(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId H payer escrow } }`,
+  reveals: `{ cadenceReveals(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId H trader size } }`,
+  consumes: `{ cadenceConsumes(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId trader size } }`,
+  swaps: `{ cadenceSwaps(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId trader sizeInEth outAmount fromCommitment } }`,
+};
+
+const OpSchema = z.object({
+  op: z.enum(Object.keys(OPERATIONS) as [string, ...string[]]),
+  last: z.coerce.number().int().min(1).max(100).optional().default(50),
 });
 
 /**
@@ -24,10 +32,11 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
-  const parsed = QuerySchema.safeParse(body);
+  const parsed = OpSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "invalid_query", detail: parsed.error.issues.slice(0, 3) }, { status: 400 });
+    return NextResponse.json({ error: "invalid_op", detail: parsed.error.issues.slice(0, 3) }, { status: 400 });
   }
+  const query = OPERATIONS[parsed.data.op].replace("$last", String(parsed.data.last));
 
   const endpoint = process.env.GRAPH_ENDPOINT;
   const key = process.env.GRAPH_API_KEY;
@@ -41,7 +50,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const id = logRequest(req, "graph", { queryLen: parsed.data.query.length });
+  const id = logRequest(req, "graph", { op: parsed.data.op });
   try {
     const res = await fetch(endpoint, {
       method: "POST",
@@ -50,10 +59,7 @@ export async function POST(req: Request) {
         ...(key ? { authorization: `Bearer ${key}` } : {}),
         "x-request-id": id,
       },
-      body: JSON.stringify({
-        query: parsed.data.query,
-        ...(parsed.data.last ? { variables: { last: parsed.data.last } } : {}),
-      }),
+      body: JSON.stringify({ query, variables: { last: parsed.data.last } }),
       // Studio GraphQL: short timeout, no caching of live data
       signal: AbortSignal.timeout(8_000),
     });

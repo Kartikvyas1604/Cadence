@@ -69,9 +69,34 @@ async function buildPaidFetch(): Promise<(url: string, init?: RequestInit) => Pr
  * real stablecoin payment through the facilitator; the response writes the
  * Cadence-slot ask in the UI. Server-held payer key — never exposed.
  */
-export async function GET(req: Request) {
+export async function GET() {
+  return NextResponse.json(
+    { error: "method_not_allowed", detail: "Paid intel is POST-only — one click, one payment." },
+    { status: 405, headers: { allow: "POST" } },
+  );
+}
+
+/** In-memory idempotency cache (single Vercel isolate — demo-grade). */
+const idempotencyCache = new Map<string, { quote: unknown; ts: number }>();
+const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
+
+export async function POST(req: Request) {
   const limited = rateLimit(req, "intel", 5, 60_000);
   if (limited) return limited;
+
+  const idempotencyKey = req.headers.get("idempotency-key");
+  if (!idempotencyKey || idempotencyKey.length < 8) {
+    return NextResponse.json(
+      { error: "idempotency_key_required", detail: "Send an Idempotency-Key header (UUID) — one key = one paid call." },
+      { status: 400 },
+    );
+  }
+
+  // H1: replay returns cached quote without a second payment
+  const cached = idempotencyCache.get(idempotencyKey);
+  if (cached && Date.now() - cached.ts < IDEMPOTENCY_TTL_MS) {
+    return NextResponse.json(cached.quote, { headers: { "cache-control": "no-store", "x-idempotent-replay": "true" } });
+  }
 
   if (!configuredScheme()) {
     return NextResponse.json(
@@ -105,17 +130,18 @@ export async function GET(req: Request) {
     }
     // decode settlement when present (proof the payment settled)
     const settlementHeader = res.headers.get("payment-response");
-    return NextResponse.json(
-      {
-        suggestedAskPerEth: quote.data.suggestedAskPerEth,
-        rationale: quote.data.rationale ?? "Paid capacity/toxicity intel",
-        source: quote.data.source ?? process.env.X402_INTEL_URL,
-        paid: true,
-        settlement: settlementHeader ? "settled" : "unknown",
-        asOf: Date.now(),
-      },
-      { headers: { "cache-control": "no-store", "x-request-id": id } },
-    );
+    const response = {
+      suggestedAskPerEth: quote.data.suggestedAskPerEth,
+      rationale: quote.data.rationale ?? "Paid capacity/toxicity intel",
+      source: quote.data.source ?? process.env.X402_INTEL_URL,
+      paid: true,
+      settlement: settlementHeader ? "settled" : "unknown",
+      asOf: Date.now(),
+    };
+    idempotencyCache.set(idempotencyKey, { quote: response, ts: Date.now() });
+    return NextResponse.json(response, {
+      headers: { "cache-control": "no-store", "x-request-id": id },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown";
     return NextResponse.json(

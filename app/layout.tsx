@@ -23,9 +23,35 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://cadence-eg.vercel.app"),
   title: "Cadence — Scarce epoch execution capacity",
   description:
     "Buy a cadence slot for this epoch. Swap against active reserves only. No slot, no fill. ERC-1155 capacity tickets on a Uniswap v4 hook.",
+  openGraph: {
+    type: "website",
+    siteName: "Cadence",
+    title: "Cadence — Buy a slot, fill against active depth",
+    description:
+      "Buy a cadence slot for this epoch. Swap against active reserves only. No slot, no fill.",
+    url: "https://cadence-eg.vercel.app",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Cadence — scarce epoch execution capacity" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Cadence — Buy a cadence slot for this epoch",
+    description: "No slot, no fill. ERC-1155 capacity tickets on a Uniswap v4 hook.",
+    images: ["/opengraph-image"],
+  },
+  alternates: { canonical: "/" },
+  other: {
+    "script:ld+json": JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      name: "Cadence",
+      description: "Scarce per-epoch execution capacity as ERC-1155 cadence slots on a Uniswap v4 hook.",
+      applicationCategory: "FinanceApplication",
+    }),
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

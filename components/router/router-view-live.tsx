@@ -248,7 +248,7 @@ function IntentPanel({
               autoComplete="off"
               value={sizeEth}
               onChange={(e) => setSizeEth(e.target.value)}
-              className="h-11 w-full bg-transparent font-mono tabular-nums text-foreground outline-none"
+              className="h-11 w-full bg-transparent font-mono tabular-nums text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             />
             <EthIcon className="inline size-3 shrink-0 text-muted" />
           </div>

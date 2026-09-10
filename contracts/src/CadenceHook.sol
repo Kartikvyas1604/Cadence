@@ -561,8 +561,9 @@ contract CadenceHook is IHooks {
                 // M6: distinguish a PAST-epoch slot holder (expired) from a
                 // never-minted trader
                 uint256 prevEpoch = currentEpoch() > 0 ? currentEpoch() - 1 : 0;
-                if (CadenceSlotsLike(slots).balanceOf(trader, prevEpoch) > 0)
+                if (CadenceSlotsLike(slots).balanceOf(trader, prevEpoch) > 0) {
                     revert EpochExpired();
+                }
                 revert NoCadenceSlot();
             }
             if (capacity < sizeInEth) revert OversizeVsSlot();

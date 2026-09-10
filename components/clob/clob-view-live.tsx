@@ -381,7 +381,7 @@ function PlaceOrderPanel({
                 autoComplete="off"
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
-                className="h-11 w-full bg-transparent font-mono tabular-nums text-foreground outline-none"
+                className="h-11 w-full bg-transparent font-mono tabular-nums text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               />
               <EthIcon className="inline size-3 shrink-0 text-muted" />
             </div>
@@ -403,7 +403,7 @@ function PlaceOrderPanel({
               autoComplete="off"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="h-11 w-full rounded-md border border-border-strong bg-surface-raised px-3 font-mono tabular-nums text-foreground outline-none focus:border-accent"
+              className="h-11 w-full rounded-md border border-border-strong bg-surface-raised px-3 font-mono tabular-nums text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus:border-accent"
             />
           </div>
           <p className="font-mono text-xs tabular-nums text-muted">

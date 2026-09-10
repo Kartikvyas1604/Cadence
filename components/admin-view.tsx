@@ -186,7 +186,7 @@ function TreasuryPanel({
                   autoComplete="off"
                   value={nextTreasury}
                   onChange={(e) => setNextTreasury(e.target.value)}
-                  className="h-11 min-w-56 flex-1 rounded-md border border-border-strong bg-surface px-3 font-mono text-xs tabular-nums text-foreground outline-none focus:border-accent"
+                  className="h-11 min-w-56 flex-1 rounded-md border border-border-strong bg-surface px-3 font-mono text-xs tabular-nums text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus:border-accent"
                 />
                 <button
                   type="button"

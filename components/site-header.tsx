@@ -9,6 +9,7 @@ import { NetworkSwitcher } from "./network-switcher";
 const NAV = [
   { href: "/console", label: "Console" },
   { href: "/buy", label: "Buy" },
+  { href: "/swap", label: "Swap" },
   { href: "/lp", label: "LP" },
   { href: "/clob", label: "CLOB" },
   { href: "/router", label: "Router" },
@@ -56,7 +57,7 @@ export function SiteHeader() {
           <WalletButton />
           <Link
             href="/buy"
-            className="hidden h-10 items-center whitespace-nowrap rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px sm:inline-flex"
+            className="inline-flex h-10 items-center whitespace-nowrap rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px"
           >
             Buy a slot
           </Link>

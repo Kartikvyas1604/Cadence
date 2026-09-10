@@ -21,7 +21,7 @@ jobs:
       - name: Tests (CI fuzz profile)
         run: forge test --profile ci
       - name: Lint (forge fmt check)
-        run: forge fmt --check || true
+        run: forge fmt --check
 
   web:
     runs-on: ubuntu-latest

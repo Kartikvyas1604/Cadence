@@ -4,6 +4,7 @@ import { AdminView } from "@/components/admin-view";
 
 export const metadata: Metadata = {
   title: "Admin — Cadence",
+  robots: { index: false, follow: false },
   description:
     "Protocol treasury: the take-rate split on every cadence-slot sale, accrued on-chain and withdrawable by the treasury role.",
 };

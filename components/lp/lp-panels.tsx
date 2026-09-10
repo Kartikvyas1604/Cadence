@@ -115,7 +115,7 @@ export function LpDepositPanel({ className = "" }: { className?: string }) {
                   setError(null);
                   setDone(false);
                 }}
-                className="h-11 w-full bg-transparent font-mono tabular-nums text-foreground outline-none"
+                className="h-11 w-full bg-transparent font-mono tabular-nums text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               />
               <span className="shrink-0 font-mono text-xs text-muted">
                 <EthIcon className="inline size-3 align-[-1px]" /> ETH
@@ -420,6 +420,8 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
           >
             <input
               id="lp-withdraw-shares"
+              aria-invalid={error ? "true" : undefined}
+              aria-describedby={error ? "lp-withdraw-error" : undefined}
               type="number"
               inputMode="decimal"
               min="0"
@@ -427,7 +429,7 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
               autoComplete="off"
               value={shares}
               onChange={(e) => setShares(e.target.value)}
-              className="h-11 w-full bg-transparent font-mono tabular-nums text-foreground outline-none"
+              className="h-11 w-full bg-transparent font-mono tabular-nums text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             />
           </div>
           <div className="flex flex-wrap gap-3">
@@ -475,7 +477,7 @@ export function LpWithdrawPanel({ className = "" }: { className?: string }) {
             </button>
           </div>
           {error ? (
-            <div aria-live="polite">
+            <div id="lp-withdraw-error" aria-live="polite">
               <LpNotice kind="error">{error}</LpNotice>
             </div>
           ) : null}

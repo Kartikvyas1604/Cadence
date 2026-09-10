@@ -659,7 +659,11 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
 
   const refreshIntel = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch("/api/intel", { method: "GET" });
+      const idemKey = crypto.randomUUID();
+      const res = await fetch("/api/intel", {
+        method: "POST",
+        headers: { "idempotency-key": idemKey },
+      });
       const body = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
         dispatch({
