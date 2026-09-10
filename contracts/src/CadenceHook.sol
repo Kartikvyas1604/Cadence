@@ -259,9 +259,30 @@ contract CadenceHook is IHooks {
         sharesOf[msg.sender] += minted;
         totalShares += minted;
         depositedEth[msg.sender] += msg.value;
-        // new shares only earn revenue/fees from here on
-        revCheckpoint[msg.sender] = revAccPerShare;
-        feeCheckpoint[msg.sender] = feeAccPerShare;
+        // C3: checkpoint-preserve — on a TOP-UP the existing claimable accrual
+        // must survive: pay it out first, then checkpoint the new position.
+        // Only a FIRST deposit initializes checkpoints.
+        uint256 priorShares = sharesOf[msg.sender] - minted;
+        if (priorShares > 0) {
+            uint256 rev = _claimableRevenue(msg.sender);
+            uint256 fee = _claimableSwapFee(msg.sender);
+            uint256 headroom = address(this).balance - msg.value - _soldCapacityEth();
+            uint256 revPaid = rev <= headroom ? rev : headroom;
+            if (revPaid > 0) {
+                revCheckpoint[msg.sender] += (revPaid * 1e18) / priorShares;
+                Address.sendValue(payable(msg.sender), revPaid);
+                emit RevenueClaimed(msg.sender, revPaid);
+            }
+            if (fee > 0) {
+                feeCheckpoint[msg.sender] = feeAccPerShare;
+                IERC20Minimal(usdc).transfer(msg.sender, fee);
+                emit SwapFeeClaimed(msg.sender, fee);
+            }
+        } else {
+            // first deposit: new position earns from here on
+            revCheckpoint[msg.sender] = revAccPerShare;
+            feeCheckpoint[msg.sender] = feeAccPerShare;
+        }
 
         if (!consumedThisEpoch) _repartition();
         emit LPDeposited(msg.sender, msg.value, minted);

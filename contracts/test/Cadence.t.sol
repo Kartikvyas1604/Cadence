@@ -467,6 +467,10 @@ contract CadenceTest is Test {
         uint256 size = 10e18;
         bytes32 H = slots.commitHash(size, currentEpoch(), bytes32(uint256(42)));
         vm.startPrank(buyer);
+        // H11: committed economics — reserved capacity = escrow * 1e18 / price.
+        // With escrow 2*PRICE → reserved = 2 ETH of capacity; a reveal of
+        // 10 ETH exceeds the committed reservation → CapacityExceeded
+        // (replaces the old InsufficientEscrow overflow path).
         slots.commitMint{value: 2 * PRICE_PER_ETH}(H); // above minEscrow, below cost
         vm.stopPrank();
 
@@ -475,7 +479,51 @@ contract CadenceTest is Test {
             _rawSwap(buyer, abi.encodeCall(router.sellEthPrivate, (key, size, bytes32(uint256(42)))), size);
         vm.stopPrank();
         assertFalse(ok);
-        assertWrapped(ret, CadenceSlots.InsufficientEscrow.selector);
+        assertWrapped(ret, CadenceSlots.CapacityExceeded.selector);
+    }
+
+    function test_revealCannotExceedCommittedReservation() public {
+        // H11 attack: commit H for a 6 ETH intent with only enough escrow for
+        // 5 ETH of reserved capacity — the size<=reserved check at reveal
+        // must block the oversell
+        uint256 intentSize = 6e18;
+        uint256 reservedCap = 5e18;
+        bytes32 H = slots.commitHash(intentSize, currentEpoch(), bytes32(uint256(7)));
+        vm.startPrank(buyer);
+        slots.commitMint{value: reservedCap * PRICE_PER_ETH / 1e18}(H);
+        vm.stopPrank();
+
+        vm.startPrank(buyer);
+        (bool ok, bytes memory ret) =
+            _rawSwap(buyer, abi.encodeCall(router.sellEthPrivate, (key, intentSize, bytes32(uint256(7)))), intentSize);
+        vm.stopPrank();
+        assertFalse(ok);
+        assertWrapped(ret, CadenceSlots.CapacityExceeded.selector);
+    }
+
+    function test_revealAtCommittedPrice() public {
+        // H11: price frozen at commit — dropping the ask between commit and
+        // reveal cannot change the committed economics
+        uint256 size = 5e18;
+        bytes32 H = slots.commitHash(size, currentEpoch(), bytes32(uint256(7)));
+        vm.startPrank(buyer);
+        slots.commitMint{value: size * PRICE_PER_ETH / 1e18}(H);
+        vm.stopPrank();
+
+        // ask drops to 50% floor
+        vm.startPrank(address(this));
+        slots.setPricePerEth(PRICE_PER_ETH / 2);
+        vm.stopPrank();
+
+        uint256 before = buyer.balance;
+        vm.startPrank(buyer);
+        (bool ok, bytes memory ret) =
+            _rawSwap(buyer, abi.encodeCall(router.sellEthPrivate, (key, size, bytes32(uint256(7)))), size);
+        vm.stopPrank();
+        assertTrue(ok);
+        // cost was already escrowed at COMMIT (0.005 ETH at the committed
+        // price — NOT the dropped price). Reveal only spends the swap ETH.
+        assertEq(buyer.balance, before - size);
     }
 
     function test_expireCommitmentRefunds() public {
@@ -536,6 +584,6 @@ contract CadenceTest is Test {
         view
         returns (address payer, uint256 epochId, uint256 escrow, uint256 reserved, CadenceSlots.CommitmentStatus status)
     {
-        (payer, epochId, escrow, reserved, status) = slots.commitments(H);
+        (payer, epochId, escrow, reserved,, status) = slots.commitments(H);
     }
 }

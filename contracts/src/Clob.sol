@@ -172,10 +172,16 @@ contract Clob is ERC1155Holder, ReentrancyGuard {
 
         b.filled += filled;
         sell.filled += filled;
-        if (b.filled == b.size) b.status = Status.Filled;
-        if (sell.filled == sell.size) sell.status = Status.Filled;
-        _untrack(b.epochId, buyId);
-        _untrack(sell.epochId, sellId);
+        // C4: only untrack orders that are FULLY filled — partial fills stay
+        // in the epoch book so expireEpoch refunds the remaining escrow
+        if (b.filled == b.size) {
+            b.status = Status.Filled;
+            _untrack(b.epochId, buyId);
+        }
+        if (sell.filled == sell.size) {
+            sell.status = Status.Filled;
+            _untrack(sell.epochId, sellId);
+        }
 
         // settle: escrowed ETH to seller, escrowed slots to buyer
         Address.sendValue(payable(sell.maker), value);

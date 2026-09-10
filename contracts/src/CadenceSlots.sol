@@ -36,7 +36,10 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
         address payer;
         uint256 epochId;
         uint256 escrow;
+        /// @notice capacity reserved against the epoch budget at commit (wei ETH)
         uint256 reserved;
+        /// @notice ask price frozen at commit time — reveal uses THIS price
+        uint256 pricePerEthAtCommit;
         CommitmentStatus status;
     }
 
@@ -116,9 +119,11 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
         return ICadenceHook(hook);
     }
 
+    /// H12: bounded by the same intel [50%, 200%] policy — no unbounded path
     function setPricePerEth(uint256 pricePerEth_) external onlyOwner {
-        require(pricePerEth_ > 0, "CadenceSlots: zero price");
+        if (pricePerEth_ < slotPriceMin || pricePerEth_ > slotPriceMax) revert AskOutOfBounds();
         pricePerEth = pricePerEth_;
+        emit SlotPriceUpdated(pricePerEth_, bytes32(0));
     }
 
     function setMinEscrow(uint256 minEscrow_) external onlyOwner {
@@ -205,6 +210,7 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
 
         uint256 epochId = currentEpoch();
         uint256 reserved = (msg.value * 1e18) / pricePerEth;
+        uint256 priceAtCommit = pricePerEth; // H11: freeze the ask at commit
         uint256 remaining = remainingCapacity();
         if (reserved > remaining) revert CapacityExceeded();
 
@@ -214,6 +220,7 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
             epochId: epochId,
             escrow: msg.value,
             reserved: reserved,
+            pricePerEthAtCommit: priceAtCommit,
             status: CommitmentStatus.Committed
         });
 
@@ -237,7 +244,11 @@ contract CadenceSlots is ERC1155, Ownable, ReentrancyGuard {
         if (c.status != CommitmentStatus.Committed) revert BadReveal();
         if (c.payer != trader) revert BadReveal();
 
-        uint256 cost = (size * pricePerEth) / 1e18;
+        // H11: committed economics — size can never exceed the capacity
+        // reserved at commit, and cost uses the COMMIT-TIME ask (price drops
+        // between commit and reveal cannot oversell the epoch budget)
+        if (size > c.reserved) revert CapacityExceeded();
+        uint256 cost = (size * c.pricePerEthAtCommit) / 1e18;
         if (c.escrow < cost) revert InsufficientEscrow();
 
         c.status = CommitmentStatus.Revealed;
