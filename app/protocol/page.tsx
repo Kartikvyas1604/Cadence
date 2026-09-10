@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { ArrowRight, Ban } from "lucide-react";
 import { SiteFooter } from "@/components/site-footer";
 import { REJECT_REASONS } from "@/lib/cadence/types";
 
 export const metadata: Metadata = {
-  title: "Protocol — Cadence",
-  description:
-    "Active/passive reserves, the λ split, epoch refresh, and the beforeSwap cadence-slot gate. How Cadence works.",
+  ...pageMetadata("/protocol", "Protocol — Cadence", "Active/passive reserves, the λ split, epoch refresh, and the beforeSwap cadence-slot gate. How Cadence works."),
 };
 
 function Section({
@@ -37,7 +36,7 @@ function Section({
 export default function ProtocolPage() {
   return (
     <>
-      <main className="flex-1">
+      <div className="flex-1">
         <div className="mx-auto w-full max-w-4xl px-4 py-16 md:px-6 md:py-20 lg:px-8">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">
             the mechanism
@@ -172,7 +171,7 @@ export default function ProtocolPage() {
             </Link>
           </Section>
         </div>
-      </main>
+      </div>
       <SiteFooter />
     </>
   );

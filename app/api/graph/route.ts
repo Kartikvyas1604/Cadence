@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { logRequest, rateLimit } from "@/lib/server/rate-limit";
+import { logRequest, rateLimit } from "../../../lib/server/rate-limit";
+import { OPERATIONS, isGraphConfigured, queryStudioGraph } from "../../../lib/server/graph";
+import { trackError } from "../../../lib/server/observe";
 
 export const dynamic = "force-dynamic";
-
-/** M2: allowlisted operations — client sends { op, last } not raw GraphQL */
-const OPERATIONS: Record<string, string> = {
-  mints: `{ cadenceMints(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId buyer size pricePaid blockNumber timestamp } }`,
-  commits: `{ cadenceCommits(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId H payer escrow } }`,
-  reveals: `{ cadenceReveals(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId H trader size } }`,
-  consumes: `{ cadenceConsumes(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId trader size } }`,
-  swaps: `{ cadenceSwaps(first: $last, orderBy: blockNumber, orderDirection: desc) { id epochId trader sizeInEth outAmount fromCommitment } }`,
-};
 
 const OpSchema = z.object({
   op: z.enum(Object.keys(OPERATIONS) as [string, ...string[]]),
@@ -38,9 +31,7 @@ export async function POST(req: Request) {
   }
   const query = OPERATIONS[parsed.data.op].replace("$last", String(parsed.data.last));
 
-  const endpoint = process.env.GRAPH_ENDPOINT;
-  const key = process.env.GRAPH_API_KEY;
-  if (!endpoint) {
+  if (!isGraphConfigured()) {
     return NextResponse.json(
       {
         error: "graph_not_configured",
@@ -51,32 +42,30 @@ export async function POST(req: Request) {
   }
 
   const id = logRequest(req, "graph", { op: parsed.data.op });
-  try {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(key ? { authorization: `Bearer ${key}` } : {}),
-        "x-request-id": id,
-      },
-      body: JSON.stringify({ query, variables: { last: parsed.data.last } }),
-      // Studio GraphQL: short timeout, no caching of live data
-      signal: AbortSignal.timeout(8_000),
-    });
-    const data = (await res.json()) as { errors?: unknown[] };
-    if (!res.ok) {
-      return NextResponse.json({ error: "upstream_error", status: res.status, data }, { status: 502 });
+  const res = await queryStudioGraph(query, 8_000, id);
+  if (!res.ok) {
+    if (res.error === "upstream_unreachable") {
+      return NextResponse.json(
+        { error: res.error, detail: res.detail },
+        { status: 502, headers: { "x-request-id": id } },
+      );
     }
-    if (data.errors?.length) {
-      return NextResponse.json({ error: "graphql_errors", errors: data.errors }, { status: 502 });
+    if (res.error === "graphql_errors") {
+      return NextResponse.json(
+        { error: res.error, errors: res.detail },
+        { status: 502, headers: { "x-request-id": id } },
+      );
     }
-    return NextResponse.json(data, {
-      headers: { "cache-control": "no-store", "x-request-id": id },
-    });
-  } catch (e) {
     return NextResponse.json(
-      { error: "upstream_unreachable", detail: e instanceof Error ? e.message : "unknown" },
-      { status: 502 },
+      { error: res.error, status: res.status, data: res.detail },
+      { status: 502, headers: { "x-request-id": id } },
     );
   }
+  return NextResponse.json(res.body, {
+    headers: {
+      "cache-control": "no-store",
+      "x-request-id": id,
+      ...(res.empty ? { "x-graph-empty": "synced-but-empty" } : {}),
+    },
+  });
 }

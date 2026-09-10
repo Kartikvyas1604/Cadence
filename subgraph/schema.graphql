@@ -15,8 +15,12 @@ type CadenceMint @entity(immutable: true) {
 """
 Private Cadence Intent — commitment H. Size is NOT indexed here; it is
 hidden until reveal (commit hash public, not private forever).
+
+The entity id is the COMMITMENT HASH H (finance-6) — the reveal handler
+loads CadenceCommit.load(H) and the reveal link always resolves. Mutable
+so the reveal link can be written when the reveal event lands.
 """
-type CadenceCommit @entity(immutable: true) {
+type CadenceCommit @entity {
   id: ID!
   epochId: BigInt!
   H: Bytes!
@@ -30,6 +34,12 @@ type CadenceCommit @entity(immutable: true) {
 
 """
 SlotRevealed — the reveal at fill time. This is where size becomes public.
+
+finance-4: on this live deployment the event's 5th field is named
+`consumed` in the ABI but carries the ETH COST PAID for the reveal
+(price at commit x size), NOT the consumed capacity. Indexed here as
+`pricePaid`. The consumed capacity IS `size` (revealAndConsume burns
+size and counts it against the epoch budget).
 """
 type CadenceReveal @entity(immutable: true) {
   id: ID!
@@ -37,7 +47,7 @@ type CadenceReveal @entity(immutable: true) {
   H: Bytes!
   trader: Bytes!
   size: BigInt!
-  consumed: BigInt!
+  pricePaid: BigInt!
   blockNumber: BigInt!
   timestamp: BigInt!
   txHash: Bytes!
@@ -96,4 +106,59 @@ type Global @entity(immutable: false) {
   totalRevealed: BigInt!
   totalConsumed: BigInt!
   totalSwaps: BigInt!
+}
+
+"""
+finance-5 — LP/protocol money ledger, event-auditable:
+
+SlotRevenueAccrued — LP pool share of slot proceeds (90% by default;
+net of the protocol take) accrued pro-rata by shares.
+"""
+type SlotRevenueAccrued @entity(immutable: true) {
+  id: ID!
+  epochId: BigInt!
+  proceeds: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+"""RevenueClaimed — an LP claimed slot-sale revenue (ETH)."""
+type RevenueClaimed @entity(immutable: true) {
+  id: ID!
+  lp: Bytes!
+  amountEth: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+"""SwapFeeClaimed — an LP claimed swap fees (USDC)."""
+type SwapFeeClaimed @entity(immutable: true) {
+  id: ID!
+  lp: Bytes!
+  amountUsdc: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+"""ProtocolRevenueWithdrawn — treasury withdrew the protocol take (ETH)."""
+type ProtocolRevenueWithdrawn @entity(immutable: true) {
+  id: ID!
+  to: Bytes!
+  amountEth: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+"""TreasuryUpdated — the protocol-take treasury rotated."""
+type TreasuryUpdated @entity(immutable: true) {
+  id: ID!
+  previous: Bytes!
+  current: Bytes!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
 }

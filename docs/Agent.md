@@ -184,6 +184,13 @@ API: Route Handler invokes CRE workflow with private inputs; returns ask+attesta
 UX: /intel mode “Confidential ask (CRE)” vs “Public x402 model”.
 Codegen: app/api/x402/cre-ask/route.ts; document CRE secrets in server env; keep Uni+Graph+Hedera as primary bounty map (CRE is capability, not a 4th forced prize swap unless Kartik chooses).
 7. Aztec / Railgun privacy path (funds — not dark AMM)
+Status: **DEFERRED** (qa-3, Pass-2 — product sign-off required to re-open). The
+adapters (`lib/shield/adapter.ts`, `lib/aztec`, `lib/railgun`) throw
+`NotWired` and never fake a transaction; /privacy states the adapter is not
+wired. A real integration needs @aztec/aztec.js or @railgun-community/quickstart
+plus proof/viewing-key setup and a funded testnet wallet — wire it with a
+skip-when-unset smoke, or keep this deferred. README/UI must not imply a
+working shield path while NotWired.
 Story: User shields assets in Railgun/Aztec, then unshields/pays into Cadence mint or stealth funder. Cadence swap + reject path stay public.
 Data: ShieldBridgeTx{ protocol: Aztec|Railgun, inTx, outTx, amount }.
 API: integration adapters shield() / unshieldTo(ephemeral) — offchain SDK + documented tx flow.

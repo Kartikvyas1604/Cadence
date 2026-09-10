@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { logRequest, rateLimit } from "@/lib/server/rate-limit";
+import { sha256, toHex } from "viem";
+import { logRequest, rateLimit } from "../../../lib/server/rate-limit";
+import { trackError } from "../../../lib/server/observe";
+import { IDEMPOTENCY_TTL_MS, withIdempotency } from "../../../lib/server/idempotency";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -68,6 +71,12 @@ async function buildPaidFetch(): Promise<(url: string, init?: RequestInit) => Pr
  * Paid capacity/toxicity intel (Hedera x402 — Blocky402). One call charges
  * real stablecoin payment through the facilitator; the response writes the
  * Cadence-slot ask in the UI. Server-held payer key — never exposed.
+ *
+ * Honesty (M11): `paid: true` + `settlement: "settled"` require an OBSERVED
+ * payment-response header from the merchant — the x402 challenge must have
+ * completed. Without observed settlement evidence the response reports
+ * `paid: false` / `settlement: "unverified"` — a bare POST can never fake
+ * settled state.
  */
 export async function GET() {
   return NextResponse.json(
@@ -75,10 +84,6 @@ export async function GET() {
     { status: 405, headers: { allow: "POST" } },
   );
 }
-
-/** In-memory idempotency cache (single Vercel isolate — demo-grade). */
-const idempotencyCache = new Map<string, { quote: unknown; ts: number }>();
-const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
 
 export async function POST(req: Request) {
   const limited = rateLimit(req, "intel", 5, 60_000);
@@ -90,12 +95,6 @@ export async function POST(req: Request) {
       { error: "idempotency_key_required", detail: "Send an Idempotency-Key header (UUID) — one key = one paid call." },
       { status: 400 },
     );
-  }
-
-  // H1: replay returns cached quote without a second payment
-  const cached = idempotencyCache.get(idempotencyKey);
-  if (cached && Date.now() - cached.ts < IDEMPOTENCY_TTL_MS) {
-    return NextResponse.json(cached.quote, { headers: { "cache-control": "no-store", "x-idempotent-replay": "true" } });
   }
 
   if (!configuredScheme()) {
@@ -111,42 +110,76 @@ export async function POST(req: Request) {
 
   const id = logRequest(req, "intel");
   try {
-    const paidFetch = await buildPaidFetch();
-    const res = await paidFetch(process.env.X402_INTEL_URL as string, {
-      method: "GET",
-      headers: { "x-request-id": id },
-      signal: AbortSignal.timeout(20_000),
+    // M-IDEM: durable reserve-or-read — at most ONE paid call per key across
+    // isolates; store failure fails closed (503) rather than paying twice
+    const { result, replayed } = await withIdempotency(idempotencyKey, IDEMPOTENCY_TTL_MS, async () => {
+      const paidFetch = await buildPaidFetch();
+      const res = await paidFetch(process.env.X402_INTEL_URL as string, {
+        method: "GET",
+        headers: { "x-request-id": id },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        throw new Error(`intel_upstream_error_${res.status}`);
+      }
+      const raw = await res.json();
+      const quote = IntelResponseSchema.safeParse(raw);
+      if (!quote.success) {
+        throw new Error("intel_invalid_payload");
+      }
+      // decode settlement when present (proof the payment settled)
+      const settlementHeader = res.headers.get("payment-response");
+      if (!settlementHeader) {
+        // M11: without OBSERVED settlement evidence the response must not
+        // claim settled state — the quote is unverified, no attestation hash
+        return {
+          suggestedAskPerEth: quote.data.suggestedAskPerEth,
+          rationale: quote.data.rationale ?? "Paid capacity/toxicity intel",
+          source: quote.data.source ?? process.env.X402_INTEL_URL,
+          paid: false,
+          settlement: "unverified",
+          settlementHash: null,
+          asOf: Date.now(),
+        };
+      }
+      // M17: stable settlement fingerprint — the receipt bound on-chain is a
+      // hash of the OBSERVED settlement proof (payment-response), not a hash
+      // of the local quote object
+      const settlementHash = sha256(toHex(settlementHeader));
+      return {
+        suggestedAskPerEth: quote.data.suggestedAskPerEth,
+        rationale: quote.data.rationale ?? "Paid capacity/toxicity intel",
+        source: quote.data.source ?? process.env.X402_INTEL_URL,
+        paid: true,
+        settlement: "settled",
+        settlementHash,
+        asOf: Date.now(),
+      };
     });
-    if (!res.ok) {
-      return NextResponse.json({ error: "intel_upstream_error", status: res.status }, { status: 502 });
+
+    if (replayed) {
+      return NextResponse.json(result, {
+        headers: { "cache-control": "no-store", "x-idempotent-replay": "true", "x-request-id": id },
+      });
     }
-    const raw = await res.json();
-    const quote = IntelResponseSchema.safeParse(raw);
-    if (!quote.success) {
-      return NextResponse.json(
-        { error: "intel_invalid_payload", detail: quote.error.issues.slice(0, 3) },
-        { status: 502 },
-      );
-    }
-    // decode settlement when present (proof the payment settled)
-    const settlementHeader = res.headers.get("payment-response");
-    const response = {
-      suggestedAskPerEth: quote.data.suggestedAskPerEth,
-      rationale: quote.data.rationale ?? "Paid capacity/toxicity intel",
-      source: quote.data.source ?? process.env.X402_INTEL_URL,
-      paid: true,
-      settlement: settlementHeader ? "settled" : "unknown",
-      asOf: Date.now(),
-    };
-    idempotencyCache.set(idempotencyKey, { quote: response, ts: Date.now() });
-    return NextResponse.json(response, {
+    return NextResponse.json(result, {
       headers: { "cache-control": "no-store", "x-request-id": id },
     });
   } catch (e) {
+    trackError("intel", e, { requestId: id });
     const msg = e instanceof Error ? e.message : "unknown";
-    return NextResponse.json(
-      { error: msg === "intel_not_configured" ? msg : "intel_call_failed", detail: msg },
-      { status: msg === "intel_not_configured" ? 503 : 502 },
-    );
+    if (msg === "idempotency_store_unavailable") {
+      return NextResponse.json(
+        { error: "idempotency_store_unavailable", detail: "The idempotency store is down — refusing to risk a double payment." },
+        { status: 503 },
+      );
+    }
+    if (msg === "intel_not_configured") {
+      return NextResponse.json({ error: msg, detail: "Paid intel is not configured — no fake quote is served." }, { status: 503 });
+    }
+    if (msg.startsWith("intel_upstream_error_")) {
+      return NextResponse.json({ error: "intel_upstream_error", status: Number(msg.split("_").at(-1)) }, { status: 502 });
+    }
+    return NextResponse.json({ error: msg === "intel_invalid_payload" ? msg : "intel_call_failed", detail: msg }, { status: 502 });
   }
 }

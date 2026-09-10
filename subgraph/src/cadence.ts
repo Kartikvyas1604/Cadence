@@ -6,6 +6,14 @@ import {
   SlotConsumed,
 } from "../generated/CadenceSlots/CadenceSlots";
 import { CadenceSwap, EpochRefreshed } from "../generated/CadenceHook/CadenceHook";
+import { CadenceSwap as CadenceSwapEvent } from "../generated/CadenceHook/CadenceHook";
+import {
+  SlotRevenueAccrued as SlotRevenueAccruedEvent,
+  RevenueClaimed as RevenueClaimedEvent,
+  SwapFeeClaimed as SwapFeeClaimedEvent,
+  ProtocolRevenueWithdrawn as ProtocolRevenueWithdrawnEvent,
+  TreasuryUpdated as TreasuryUpdatedEvent,
+} from "../generated/CadenceHook/CadenceHook";
 import {
   CadenceMint,
   CadenceCommit,
@@ -14,6 +22,11 @@ import {
   CadenceSwap as CadenceSwapEntity,
   PoolState,
   Global,
+  SlotRevenueAccrued,
+  RevenueClaimed,
+  SwapFeeClaimed,
+  ProtocolRevenueWithdrawn,
+  TreasuryUpdated,
 } from "../generated/schema";
 
 const GLOBAL_ID = "global";
@@ -54,7 +67,9 @@ export function handleSlotMinted(event: SlotMinted): void {
 }
 
 export function handleSlotCommitted(event: SlotCommitted): void {
-  const e = new CadenceCommit(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
+  // finance-6: the commit id is the COMMITMENT HASH H (not tx-log) so the
+  // reveal handler can always load CadenceCommit.load(H.toHex())
+  const e = new CadenceCommit(event.params.H.toHex());
   e.epochId = event.params.epochId;
   e.H = event.params.H;
   e.payer = event.params.payer;
@@ -72,18 +87,22 @@ export function handleSlotRevealed(event: SlotRevealed): void {
   e.H = event.params.H;
   e.trader = event.params.trader;
   e.size = event.params.size;
-  e.consumed = event.params.consumed;
+  // finance-4: the ABI names the 5th field `consumed` but it carries the ETH
+  // cost paid (commit-time price x size) — indexed as pricePaid; the consumed
+  // capacity IS size (revealAndConsume burns size against the epoch budget)
+  e.pricePaid = event.params.consumed;
   e.blockNumber = event.block.number;
   e.timestamp = event.block.timestamp;
   e.txHash = event.transaction.hash;
   e.save();
 
-  // link commit -> reveal (size becomes public HERE, not before)
+  // link commit <-> reveal (size becomes public HERE, not before)
   const commit = CadenceCommit.load(event.params.H.toHex());
   if (commit != null) {
     commit.reveal = e.id;
     commit.save();
   }
+  e.commit = commit != null ? commit.id : event.params.H.toHex();
   bump("revealed");
 }
 
@@ -129,4 +148,58 @@ export function handleEpochRefreshed(event: EpochRefreshed): void {
   p.timestamp = event.block.timestamp;
   p.save();
   log.info("epoch refreshed: {}", [event.params.epochId.toString()]);
+}
+
+// ---------------------------------------------------------------------
+// CadenceHook money events (finance-5) — LP/protocol ledger, event-auditable
+// ---------------------------------------------------------------------
+
+export function handleSlotRevenueAccrued(event: SlotRevenueAccruedEvent): void {
+  const e = new SlotRevenueAccrued(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
+  e.epochId = event.params.epochId;
+  e.proceeds = event.params.proceeds;
+  e.blockNumber = event.block.number;
+  e.timestamp = event.block.timestamp;
+  e.txHash = event.transaction.hash;
+  e.save();
+}
+
+export function handleRevenueClaimed(event: RevenueClaimedEvent): void {
+  const e = new RevenueClaimed(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
+  e.lp = event.params.lp;
+  e.amountEth = event.params.amountEth;
+  e.blockNumber = event.block.number;
+  e.timestamp = event.block.timestamp;
+  e.txHash = event.transaction.hash;
+  e.save();
+}
+
+export function handleSwapFeeClaimed(event: SwapFeeClaimedEvent): void {
+  const e = new SwapFeeClaimed(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
+  e.lp = event.params.lp;
+  e.amountUsdc = event.params.amountUsdc;
+  e.blockNumber = event.block.number;
+  e.timestamp = event.block.timestamp;
+  e.txHash = event.transaction.hash;
+  e.save();
+}
+
+export function handleProtocolRevenueWithdrawn(event: ProtocolRevenueWithdrawnEvent): void {
+  const e = new ProtocolRevenueWithdrawn(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
+  e.to = event.params.to;
+  e.amountEth = event.params.amount;
+  e.blockNumber = event.block.number;
+  e.timestamp = event.block.timestamp;
+  e.txHash = event.transaction.hash;
+  e.save();
+}
+
+export function handleTreasuryUpdated(event: TreasuryUpdatedEvent): void {
+  const e = new TreasuryUpdated(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
+  e.previous = event.params.previous;
+  e.current = event.params.current;
+  e.blockNumber = event.block.number;
+  e.timestamp = event.block.timestamp;
+  e.txHash = event.transaction.hash;
+  e.save();
 }

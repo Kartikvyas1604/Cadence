@@ -86,7 +86,7 @@ test("INTEL_QUOTE writes the ask; INTEL_ERROR only records the failure", () => {
   let s = withPool();
   s = reducer(s, {
     type: "INTEL_QUOTE",
-    quote: { suggestedAskPerEth: 0.002, asOf: 1, rationale: "r", source: "x402", costUsd: 0.001 },
+    quote: { suggestedAskPerEth: 0.002, asOf: 1, rationale: "r", source: "x402", costUsd: 0.001, settlementHash: null },
   });
   assert.equal(s.slotPricePerEth, 0.002);
   s = reducer(s, { type: "INTEL_ERROR", message: "not configured" });

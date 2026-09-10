@@ -95,7 +95,7 @@ which deployment the UI talks to.**
 | `/lp` | LP desk — deposit, λ allocation, capacity budget, dual ledgers, bounded withdraw |
 | `/clob` | Secondary market — limit buy/sell of epoch slots, expiring book |
 | `/router` | Multi-pool quote comparison + one-click execute (poolId always shown) |
-| `/privacy` | Private Cadence Intent (commit→reveal) + stealth payer + Aztec/Railgun fund path |
+| `/privacy` | Private Cadence Intent (commit→reveal) + stealth payer; Aztec/Railgun fund path **deferred** (adapters throw NotWired — no fake txs) |
 | `/graph` | Live Studio index + LVR/markout panel |
 | `/intel` | Paid x402 intel writes the ask · CRE confidential-ask mode · dynamic onchain price |
 | `/admin` | Protocol treasury — take-rate split, accrued revenue, treasury withdraw |
@@ -126,7 +126,7 @@ instrument — a slot is a time-slice, not equity.
 | 4 | Dynamic onchain slot price from paid intel (bounded 50–200%) | `/intel` + `setSlotPriceFromIntel` |
 | 5 | Stealth / ephemeral payer wallets | `/privacy` + `lib/stealth` |
 | 6 | Chainlink CRE TEE confidential ask | `/intel` + `/api/x402/cre-ask` |
-| 7 | Aztec / Railgun fund path (shields funds, not the swap) | `/privacy` + `lib/shield` |
+| 7 | Aztec / Railgun fund path (shields funds, not the swap) — **DEFERRED** (qa-3): adapters honest-NotWired | `/privacy` + `lib/shield` |
 | 8 | Protocol take-rate on slot sales (90/10 default) | `/admin` + hook accounting |
 
 ## Paid intel writes the price

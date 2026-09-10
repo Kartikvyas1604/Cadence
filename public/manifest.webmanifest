@@ -1,0 +1,17 @@
+{
+  "name": "Cadence — Scarce epoch execution capacity",
+  "short_name": "Cadence",
+  "description": "Buy a cadence slot for this epoch. Swap against active reserves only. No slot, no fill.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0A08",
+  "theme_color": "#0B0A08",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

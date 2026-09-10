@@ -29,11 +29,12 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
 
   async function handleBuy() {
     if (pending || !connected || ask === null || !contractsReady || insufficient) return;
+    setError(null);
     setPending(true);
     try {
-      await buySlot(size).catch((e) => {
-        setError(e instanceof Error ? e.message.slice(0, 140) : "mint failed");
-      });
+      await buySlot(size);
+    } catch (e) {
+      setError(e instanceof Error ? e.message.slice(0, 140) : "mint failed");
     } finally {
       setPending(false);
     }
@@ -117,7 +118,10 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
               key={p}
               type="button"
               aria-pressed={size === p}
-              onClick={() => setSize(p)}
+              onClick={() => {
+                setError(null);
+                setSize(p);
+              }}
               className={`h-11 rounded-md border font-mono text-sm tabular-nums transition-colors duration-100 ${
                 size === p
                   ? "border-accent bg-accent/10 text-accent-strong"
@@ -130,7 +134,10 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
           <button
             type="button"
             aria-pressed={size === 10}
-            onClick={() => setSize(10)}
+            onClick={() => {
+              setError(null);
+              setSize(10);
+            }}
             className={`h-11 rounded-md border font-mono text-sm tabular-nums transition-colors duration-100 ${
               size === 10
                 ? "border-accent bg-accent/10 text-accent-strong"
@@ -174,6 +181,16 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           Wallet holds {s.wallet.eth !== null ? `${fmtEth(s.wallet.eth, 4)} ` : ""}
           <EthIcon /> — not enough for this slot. Pick smaller capacity.
+        </p>
+      ) : null}
+
+      {error ? (
+        <p
+          role="alert"
+          className="mt-4 flex items-start gap-1.5 rounded-md border border-danger/50 bg-danger/5 p-2.5 text-xs leading-5 text-danger"
+        >
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          Mint failed: {error}. Check your wallet and retry.
         </p>
       ) : null}
 

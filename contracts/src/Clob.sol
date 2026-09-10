@@ -196,9 +196,12 @@ contract Clob is ERC1155Holder, ReentrancyGuard {
     // ------------------------------------------------------------------
 
     /// @notice Refund all open orders of a PAST epoch. Permissionless.
+    /// H2: iterate a MEMORY snapshot — the storage array is mutated by
+    /// _untrack (swap-and-pop), so forward-iterating it live skips the order
+    /// swapped into the current index.
     function expireEpoch(uint256 epochId) external {
         if (epochId >= currentEpoch()) revert EpochNotExpired();
-        uint256[] storage ids = openIds[epochId];
+        uint256[] memory ids = openIds[epochId];
         uint256 count = 0;
         for (uint256 i = 0; i < ids.length; i++) {
             uint256 id = ids[i];

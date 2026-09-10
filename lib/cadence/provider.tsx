@@ -28,7 +28,6 @@ import {
   type CadenceDeployment,
 } from "./abis";
 import { decodeWrappedInner, publicClientFor, walletClientFor, REVERT_SELECTORS } from "./contract";
-import { keccak256, toHex } from "viem";
 
 const StateContext = createContext<WorldState | null>(null);
 const ActionsContext = createContext<{
@@ -590,12 +589,17 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       const ctx = requireReady();
       if (!ctx) return;
       const { pc, wc, d } = ctx;
-      const askWei = parseUnits(String(askEth), 18);
-      // x402 payment proof: keccak of the stored quote payload (server
-      // returns the paid quote; its hash binds the ask to the receipt)
+      // M17: the receipt bound on-chain is the server-computed hash of the
+      // OBSERVED settlement proof — never a hash of a local quote object.
+      // Without a settlement hash there is no attestation to write.
       const quote = stateRef.current.intel;
-      const payload = JSON.stringify(quote ?? { asOf: 0 });
-      const receiptHash = keccak256(toHex(payload)) as `0x${string}`;
+      const receiptHash = quote?.settlementHash as `0x${string}` | null;
+      if (!receiptHash) {
+        throw new Error(
+          "no settled intel receipt — fetch paid intel (a settled x402 call) before writing the ask",
+        );
+      }
+      const askWei = parseUnits(String(askEth), 18);
       await sendTx(
         () =>
           wc.writeContract({
@@ -680,6 +684,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
           rationale: String(body.rationale ?? ""),
           source: String(body.source ?? "x402"),
           costUsd: 0,
+          settlementHash: (body.settlementHash as string | null) ?? null,
         } satisfies IntelQuote,
       });
       return true;

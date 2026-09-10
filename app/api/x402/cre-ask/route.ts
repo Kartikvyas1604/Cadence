@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { logRequest, rateLimit } from "@/lib/server/rate-limit";
+import { logRequest, rateLimit } from "../../../../lib/server/rate-limit";
+import { trackError } from "../../../../lib/server/observe";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -70,6 +71,7 @@ export async function GET(req: Request) {
       { headers: { "cache-control": "no-store", "x-request-id": id } },
     );
   } catch (e) {
+    trackError("cre-ask", e, { requestId: id });
     return NextResponse.json(
       { error: "cre_call_failed", detail: e instanceof Error ? e.message : "unknown" },
       { status: 502 },

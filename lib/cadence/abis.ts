@@ -53,6 +53,11 @@ export const slotsAbi = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "", type: "address" }, { name: "", type: "uint256" }], outputs: [{ name: "", type: "uint256" }] },
   { type: "event", name: "SlotMinted", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "buyer", type: "address", indexed: true }, { name: "size", type: "uint256", indexed: false }, { name: "pricePaid", type: "uint256", indexed: false }] },
   { type: "event", name: "SlotCommitted", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "H", type: "bytes32", indexed: true }, { name: "payer", type: "address", indexed: true }, { name: "escrow", type: "uint256", indexed: false }] },
+  // NOTE (finance-4, immutability-aware): on this live deployment the 5th
+  // SlotRevealed field is ABI-named `consumed` but carries the ETH COST paid
+  // (commit-time price × size), NOT consumed capacity — the consumed capacity
+  // IS `size`. New deploys may rename it pricePaid; until then indexers must
+  // read it as pricePaid.
   { type: "event", name: "SlotRevealed", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "H", type: "bytes32", indexed: true }, { name: "trader", type: "address", indexed: true }, { name: "size", type: "uint256", indexed: false }, { name: "consumed", type: "uint256", indexed: false }] },
   { type: "event", name: "SlotConsumed", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "trader", type: "address", indexed: true }, { name: "size", type: "uint256", indexed: false }] },
   { type: "event", name: "SlotExpired", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "holder", type: "address", indexed: true }, { name: "size", type: "uint256", indexed: false }] },

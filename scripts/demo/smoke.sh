@@ -130,6 +130,40 @@ CUT=$(cast call $H "accruedProtocolRevenue()(uint256)" --rpc-url $RPC | cut -d" 
 python3 -c "import sys; sys.exit(0 if int('$CUT') >= 0 else 1)" || fail "protocol revenue read failed"
 echo "protocol take ledger: $CUT wei ETH (90/10 split per spec)"
 
+say "9. CLOB epoch expiry: buy order expires + refunds in ONE call (EpochExpired)"
+if [ -n "$SLOB" ] && [ "$SLOB" != "null" ]; then
+  EPOCH=$(cast call $S "currentEpoch()(uint256)" --rpc-url $RPC | cut -d" " -f1)
+  cast send $SLOB "placeOrder(bool,uint256,uint256,uint256)" true $EPOCH 1e18 0.002e18 \
+    --value 0.01e18 --private-key $PK1 --rpc-url $RPC > /dev/null \
+    || fail "CLOB buy placement failed"
+  CLOB_ETH_BEFORE=$(cast balance $SLOB --rpc-url $RPC)
+  python3 -c "import sys; sys.exit(0 if int('$CLOB_ETH_BEFORE') > 0 else 1)" || fail "CLOB buy escrow missing"
+  # roll past the epoch (anvil mine), then a single expireEpoch must refund
+  cast rpc anvil_mine 200 --rpc-url $RPC > /dev/null
+  cast send $SLOB "expireEpoch(uint256)" 0 --private-key $PK1 --rpc-url $RPC > /dev/null \
+    || fail "expireEpoch failed"
+  CLOB_ETH_AFTER=$(cast balance $SLOB --rpc-url $RPC)
+  python3 -c "import sys; sys.exit(0 if int('$CLOB_ETH_AFTER') == 0 else 1)" \
+    || fail "CLOB escrow not fully refunded on epoch expiry"
+  echo "CLOB expire ok: escrow $CLOB_ETH_BEFORE -> $CLOB_ETH_AFTER (EpochExpired path)"
+else
+  echo "no clob in deployment manifest — skipping (honest)"
+fi
+
+say "9b. oversize vs ACTIVE reserves rejects (PassiveUnlock / OversizeVsActive)"
+# after the epoch roll the fresh epoch's active depth is ~25% of seeds; a swap
+# larger than active must reject (PassiveUnlock when active == 0, else
+# OversizeVsActive) — never unlock passive mid-epoch
+ACTIVE=$(cast call $H "activeEth()(uint256)" --rpc-url $RPC | cut -d" " -f1)
+[ "$ACTIVE" != "0" ] && BIGGER=$(python3 -c "print(int('$ACTIVE')*2)") || BIGGER=1000000000000000000000
+OUT=$(cast send $R "swap((address,address,uint24,int24,address),bool,uint256)" "$KEY" true "$BIGGER" \
+  --value "$BIGGER" --private-key $PK1 --rpc-url $RPC 2>&1 || true)
+OVERSIZE_ACTIVE=$(cast sig "OversizeVsActive()")
+PASSIVE=$(cast sig "PassiveUnlock()")
+echo "$OUT" | grep -qE "$OVERSIZE_ACTIVE|$PASSIVE" \
+  || fail "oversize-vs-active swap did not reject (want OversizeVsActive or PassiveUnlock)"
+echo "oversize-vs-active rejected ok (passive stays locked)"
+
 say "PASS — full demo path verified on-chain"
 # keep the chain alive for the browser console (localhost:8545)
 echo ""

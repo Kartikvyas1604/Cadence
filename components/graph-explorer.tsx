@@ -27,7 +27,7 @@ export function GraphExplorer() {
   );
 
   return (
-    <main className="flex-1">
+    <div className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-12 md:px-6 lg:px-8">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">
           the index
@@ -94,6 +94,6 @@ export function GraphExplorer() {
           </section>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

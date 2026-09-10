@@ -157,7 +157,7 @@ export function RouterView() {
   const canExecute = selected !== null && rows.some((r) => r.poolId === selected && r.canServe) && !!s.wallet.address && !pending;
 
   return (
-    <main className="flex-1">
+    <div className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-6 lg:px-8">
         <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">
           multi-pool router
@@ -195,7 +195,7 @@ export function RouterView() {
           />
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 

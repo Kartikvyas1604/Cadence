@@ -18,7 +18,7 @@ const FACTS = [
 
 export function LpView() {
   return (
-    <main className="flex-1">
+    <div className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-6 lg:px-8">
         <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">
           LP desk
@@ -57,6 +57,6 @@ export function LpView() {
           </div>
         </section>
       </div>
-    </main>
+    </div>
   );
 }

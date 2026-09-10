@@ -41,3 +41,23 @@
 Found a bug? Email the team or open a private GitHub security advisory — do
 not open a public issue. Testnet bounties considered case by case; mainnet
 deployment ships with a formal bounty program.
+
+## Secret rotation attestation (backend-7)
+
+Pass-1 of the production audit established that Graph / Hedera / x402 private
+material was exposed outside git (since removed from the repo; `hello.md` is
+gone from `main`; `.gitignore` covers `.env*`). Public git evidence cannot
+prove provider-side revocation, so the operator records the rotation here —
+timestamps only, never key material.
+
+**Operator checklist — verify each line at the provider, then date it:**
+
+- [ ] Graph Studio API key issued BEFORE pass-1: **revoked** (old key fails auth) — rotated on: ___________
+- [ ] Hedera / x402 payer account + ECDSA key exposed in pass-1: **abandoned/rotated** (old key fails auth; new key minted only into the host secret store) — rotated on: ___________
+- [ ] Blocky402 facilitator payer material (if any exposed): rotated — on: ___________
+- [ ] New keys minted directly into Vercel env (never via chat, tickets, or git) — on: ___________
+- [ ] Rotation confirmed by observing old credentials fail (`/api/health` still `healthy` on NEW keys) — on: ___________
+
+Rotation dates are attestations by the operator (Kartik), recorded without
+any secret material. If any box above is still empty, treat the exposed
+credentials as LIVE and rotate before relying on intel/payments.

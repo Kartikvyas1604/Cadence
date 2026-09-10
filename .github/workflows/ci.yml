@@ -21,7 +21,7 @@ jobs:
       - name: Tests (CI fuzz profile)
         run: forge test --profile ci
       - name: Lint (forge fmt check)
-        run: forge fmt --check
+        run: forge fmt --check src test script
 
   web:
     runs-on: ubuntu-latest
@@ -34,6 +34,8 @@ jobs:
       - run: npm ci
       - name: Unit tests (reducer)
         run: npm test
+      - name: Route Handler tests (honesty + payment paths)
+        run: node --import tsx --test "test/api/*.test.ts"
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint
@@ -42,3 +44,38 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_CHAIN_ID: "11155111"
+
+  # qa-2: the demo smoke (buy → swap → reject → commit/reveal → LP → CLOB)
+  # is the critical path — it MUST gate merges, not just run locally.
+  demo-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+      - name: Demo smoke (deploy → mint → swap → rejects → LP → CLOB)
+        run: |
+          bash scripts/demo/smoke.sh; code=$?
+          pkill -f "anvil --silent" 2>/dev/null || true
+          exit $code
+
+  # backend-4: post-deploy smoke — verifies live honesty surfaces after deploy
+  # (health 200, intel GET 405, merchant 402, graph invalid_op 400). Runs on
+  # main pushes when PROD_SMOKE_URL is configured; never spends x402 funds.
+  prod-smoke:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [forge-tests, web]
+    env:
+      PROD_SMOKE_URL: ${{ secrets.PROD_SMOKE_URL }}
+    steps:
+      - name: Post-deploy smoke
+        if: env.PROD_SMOKE_URL != ''
+        run: |
+          set -e
+          base="${PROD_SMOKE_URL%/}"
+          [ "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/health")" = "200" ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/intel")" = "405" ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/intel-service/ask")" = "402" ]
+          echo "prod smoke ok"

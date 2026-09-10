@@ -16,7 +16,7 @@ import { formatUnits } from "viem";
  */
 export function PrivacyView() {
   return (
-    <main className="flex-1">
+    <div className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-6 lg:px-8">
         <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">
           capacity privacy
@@ -37,7 +37,7 @@ export function PrivacyView() {
           <PrivacyFactsPanel className="lg:col-span-1" />
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 

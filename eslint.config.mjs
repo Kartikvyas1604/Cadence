@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Foundry project + vendored deps (linted by `forge build`)
     "contracts/**",
+    // Graph subgraph (AssemblyScript — linted by `graph build`)
+    "subgraph/**",
   ]),
 ]);
 

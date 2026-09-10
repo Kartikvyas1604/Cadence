@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SiteFooter } from "@/components/site-footer";
 
 export const metadata: Metadata = { title: "Not found — Cadence" };
 
 export default function NotFound() {
   return (
-    <main className="flex-1 flex items-center justify-center px-4 py-24">
+    <div className="flex-1 flex items-center justify-center px-4 py-24">
       <div className="text-center">
         <p className="font-mono text-xs uppercase tracking-[0.3em] text-accent">404</p>
         <h1 className="mt-3 font-serif text-4xl text-foreground md:text-5xl">Page not found</h1>
@@ -17,6 +16,6 @@ export default function NotFound() {
           <Link href="/console" className="h-11 inline-flex items-center rounded-md border border-border-strong px-5 text-sm text-foreground hover:bg-surface-raised">Console</Link>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

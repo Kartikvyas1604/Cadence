@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test:contracts": "cd contracts && forge test",
     "deploy:anvil": "cd contracts && forge script script/DeployCadence.s.sol --rpc-url http://localhost:8545 --broadcast --slow",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "node --import tsx --test test/*.test.ts test/api/*.test.ts",
     "demo": "bash scripts/demo/smoke.sh",
     "deploy:sepolia": "bash scripts/demo/deploy-live.sh"
   },

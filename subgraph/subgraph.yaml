@@ -55,4 +55,15 @@ dataSources:
           handler: handleCadenceSwap
         - event: EpochRefreshed(indexed uint256,uint256,uint256,uint256,uint256)
           handler: handleEpochRefreshed
+        # finance-5: LP/protocol money ledger — event-auditable 90/10 accruals
+        - event: SlotRevenueAccrued(indexed uint256,uint256)
+          handler: handleSlotRevenueAccrued
+        - event: RevenueClaimed(indexed address,uint256)
+          handler: handleRevenueClaimed
+        - event: SwapFeeClaimed(indexed address,uint256)
+          handler: handleSwapFeeClaimed
+        - event: ProtocolRevenueWithdrawn(indexed address,uint256)
+          handler: handleProtocolRevenueWithdrawn
+        - event: TreasuryUpdated(indexed address,indexed address)
+          handler: handleTreasuryUpdated
       file: ./src/cadence.ts

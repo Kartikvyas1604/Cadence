@@ -6,7 +6,7 @@ import { RejectLogPanel } from "./reject-log-panel";
 /** /swap — the gate: slot ≥ size, notional burned, active-only fill. */
 export function SwapView() {
   return (
-    <main className="flex-1">
+    <div className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-6 lg:px-8">
         <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">
           fill
@@ -24,6 +24,6 @@ export function SwapView() {
           <RejectLogPanel className="lg:col-span-1" />
         </div>
       </div>
-    </main>
+    </div>
   );
 }

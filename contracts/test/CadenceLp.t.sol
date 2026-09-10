@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, console2} from "forge-std/Test.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -500,6 +500,200 @@ contract CadenceTakeRateTest is Test {
         vm.prank(buyer);
         slots.mintPublic{value: cost + 1 ether}(5e18);
         assertEq(buyer.balance, 10_000e18 - cost);
+    }
+}
+
+/**
+ * H1 (finance-1) — depositEth top-up must settle accrued slot revenue on
+ * PRE-MINT shares exactly like claim/withdraw: pay the headroom-capped slice,
+ * checkpoint to revAccPerShare, park the unpaid remainder in strandedRev.
+ * Newly minted shares may only earn FUTURE accruals — never amplify the
+ * pre-deposit claim. Fixture uses a 1:1 slot ask so sale proceeds are large
+ * enough to build headroom-constrained states.
+ */
+contract CadenceLpTopupHeadroomTest is Test {
+    uint160 constant HOOK_FLAGS = uint160(1 << 7 | 1 << 3);
+
+    IPoolManager manager;
+    MockUSDC usdc;
+    CadenceSlots slots;
+    CadenceHook hook;
+    CadenceRouter router;
+    PoolKey key;
+
+    address lpA = makeAddr("lpA");
+    address lpB = makeAddr("lpB");
+    address buyer = makeAddr("buyer");
+
+    uint256 constant EPOCH_LEN = 12;
+    uint256 constant PROTOCOL_TAKE_BPS = 0;
+    // 1 ETH per 1 ETH of capacity — proceeds ≈ capacity notional
+    uint256 constant PRICE_PER_ETH = 1e18;
+
+    function setUp() public {
+        manager = IPoolManager(address(new PoolManager(address(0))));
+        usdc = new MockUSDC(address(this));
+
+        bytes memory codeSlots = abi.encodePacked(
+            type(CadenceSlots).creationCode, abi.encode(PRICE_PER_ETH, PRICE_PER_ETH * 2, "", address(this))
+        );
+        address slotsAddr = address(
+            uint160(
+                uint256(
+                    keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(51)), keccak256(codeSlots)))
+                )
+            )
+        );
+        bytes memory codeRouter = abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, address(usdc)));
+        address routerAddr = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(bytes1(0xff), address(this), bytes32(uint256(52)), keccak256(codeRouter))
+                    )
+                )
+            )
+        );
+        bytes memory args = abi.encode(
+            manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, PROTOCOL_TAKE_BPS, address(this)
+        );
+        bytes memory code = abi.encodePacked(type(CadenceHook).creationCode, args);
+        bytes32 salt;
+        address hookAddr;
+        while (true) {
+            salt = bytes32(vm.randomUint());
+            hookAddr = address(
+                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(code)))))
+            );
+            if (uint160(hookAddr) & Hooks.ALL_HOOK_MASK == HOOK_FLAGS) break;
+        }
+
+        slots = new CadenceSlots{salt: bytes32(uint256(51))}(PRICE_PER_ETH, PRICE_PER_ETH * 2, "", address(this));
+        new CadenceRouter{salt: bytes32(uint256(52))}(manager, address(usdc));
+        hook = new CadenceHook{salt: salt}(
+            manager, address(usdc), slotsAddr, routerAddr, 2000, EPOCH_LEN, 30, PROTOCOL_TAKE_BPS, address(this)
+        );
+        slots.setHook(address(hook));
+
+        key = PoolKey({
+            currency0: Currency.wrap(address(0)),
+            currency1: Currency.wrap(address(usdc)),
+            fee: 0,
+            tickSpacing: 60,
+            hooks: hook
+        });
+        manager.initialize(key, TickMath.getSqrtPriceAtTick(0));
+        usdc.approve(address(hook), type(uint256).max);
+        hook.seedUsdc(3_000_000e18);
+
+        vm.deal(lpA, 100_000e18);
+        vm.deal(lpB, 100_000e18);
+        vm.deal(buyer, 100_000e18);
+    }
+
+    function _buySlot(address who, uint256 size) internal {
+        vm.startPrank(who);
+        slots.mintPublic{value: (size * PRICE_PER_ETH) / 1e18 + 1 ether}(size);
+        vm.stopPrank();
+    }
+
+    /// Headroom is sufficient at top-up: the whole pending accrual pays out on
+    /// the OLD shares exactly once; after mint, claimable is 0 and the new
+    /// shares only earn future accruals. (Bug paid pending recomputed on
+    /// post-mint shares — remainder × (old+new)/old amplification.)
+    function test_topUpUnconstrainedPaysPreMintClaimableOnce() public {
+        vm.prank(lpA);
+        hook.depositEth{value: 100e18}();
+        vm.prank(lpB);
+        hook.depositEth{value: 100e18}();
+
+        // full active capacity 40e18 sold at 1:1 → proceeds 40e18, 20e18 per LP
+        _buySlot(buyer, 40e18);
+        (,, uint256 pendA,,) = hook.lpPosition(lpA);
+        assertEq(pendA, 20e18, "pre-mint claimable");
+
+        uint256 before = lpA.balance;
+        uint256 sharesBefore = hook.totalShares();
+        vm.prank(lpA);
+        uint256 minted = hook.depositEth{value: 100e18}();
+
+        // paid exactly the pre-mint accrual — not amplified by the new shares
+        // (lpA also sends the 100e18 deposit: net = +20e18 - 100e18)
+        assertEq(before - lpA.balance, 80e18, "top-up pays pre-mint accrual once");
+        // checkpoint moved to revAccPerShare: nothing left claimable
+        (,, uint256 claimableAfter,,) = hook.lpPosition(lpA);
+        assertEq(claimableAfter, 0, "claimable zero after top-up");
+        assertEq(hook.strandedRev(lpA), 0);
+        // shares minted pro-rata on the ex-revenue balance (240e18 before payout)
+        uint256 expectedMinted = (100e18 * sharesBefore) / 240e18;
+        assertEq(minted, expectedMinted, "pro-rata mint on pre-payout balance");
+    }
+
+    /// Headroom-constrained top-up: payout capped by sold-capacity headroom
+    /// (msg.value excluded); the unpaid remainder parks in strandedRev —
+    /// claimable after the top-up equals the remainder, NOT amplified.
+    function test_topUpHeadroomConstrainedStrandsRemainder() public {
+        vm.prank(lpA);
+        hook.depositEth{value: 100e18}();
+
+        // full active capacity 20e18 sold at 1:1 → proceeds 20e18, all to lpA
+        _buySlot(buyer, 20e18);
+        (,, uint256 pendA,,) = hook.lpPosition(lpA);
+        assertEq(pendA, 20e18);
+
+        // drain headroom: withdraw 99.999 of 100 shares — revenue pays only
+        // the headroom sliver, remainder strands
+        uint256 before = lpA.balance;
+        vm.prank(lpA);
+        uint256 out = hook.withdrawEth(99.999e18);
+        // ethOut = 99.999 * (120 - 20) / 100
+        assertEq(out, 99.999e18);
+        // rev headroom = 120 - 99.999 - 20 = 0.001 → capped payout
+        assertEq(lpA.balance - before, 99.999e18 + 0.001e18, "revenue capped at headroom");
+        assertEq(hook.strandedRev(lpA), 20e18 - 0.001e18, "remainder stranded");
+        assertEq(hook.sharesOf(lpA), 0.001e18);
+
+        // new epoch: fresh budget 20% of remaining balance = 4e18; sold resets
+        vm.roll(block.number + EPOCH_LEN);
+        _buySlot(buyer, 4e18); // proceeds 4e18 accrue to the 0.001e18 shares
+
+        // claimable = stranded + 4e18 fresh accrual; headroom = 24 - 4 = 20
+        (,, uint256 pendBeforeTopUp,,) = hook.lpPosition(lpA);
+        assertEq(pendBeforeTopUp, (20e18 - 0.001e18) + 4e18, "pending before constrained top-up");
+
+        // H1 top-up: settles pre-mint, caps at headroom, strands the rest
+        uint256 balBefore = lpA.balance;
+        vm.prank(lpA);
+        hook.depositEth{value: 1e18}();
+        // headroom excl. msg.value = (20+4) - 1 - 4 = 19... balance during call is
+        // 24e18 + 1e18 = 25e18 → balanceBefore = 24e18; sold = 4e18 → cap = 20e18
+        // (lpA also sends the 1e18 deposit: net = +20e18 - 1e18)
+        assertEq(lpA.balance - balBefore, 19e18, "top-up pays headroom cap only");
+        assertEq(hook.strandedRev(lpA), (20e18 - 0.001e18) + 4e18 - 20e18, "unpaid remainder parked, not amplified");
+        (,, uint256 claimableAfter,,) = hook.lpPosition(lpA);
+        assertEq(claimableAfter, hook.strandedRev(lpA), "claimable == stranded remainder");
+        // new shares only earn future accruals: no pending delta beyond stranded
+        assertLt(claimableAfter, pendBeforeTopUp, "no amplification by newly minted shares");
+    }
+
+    /// Full-headroom variant of the same invariant: everything pays out, the
+    /// checkpoint lands on revAccPerShare, and only future accruals reach the
+    /// new shares.
+    function test_topUpAfterFullPayoutEarnsOnlyFutureAccruals() public {
+        vm.prank(lpA);
+        hook.depositEth{value: 100e18}();
+        _buySlot(buyer, 20e18); // proceeds 20e18 → claimable 20e18
+
+        vm.prank(lpA);
+        hook.depositEth{value: 50e18}();
+        (,, uint256 claimable,,) = hook.lpPosition(lpA);
+        assertEq(claimable, 0, "all paid at top-up");
+
+        // accrue again: only future accruals reach the position — the settled
+        // accrual is not re-paid (capacity exhausted this epoch, nothing new
+        // to sell; checkpoint sits on revAccPerShare)
+        (,, uint256 claimableStill,,) = hook.lpPosition(lpA);
+        assertEq(claimableStill, 0, "no re-payment of settled accrual");
     }
 }
 

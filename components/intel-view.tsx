@@ -34,7 +34,7 @@ export function IntelView() {
   const [mode, setMode] = useState<"public" | "cre">("public");
   const priceWired = useModuleProbe(s.chain.chainId, (d) => d.slots, adminAbi, "slotPriceMin");
   return (
-    <main className="flex-1">
+    <div className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-12 md:px-6 lg:px-8">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">
           agentic payments
@@ -130,7 +130,7 @@ export function IntelView() {
           </Link>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 

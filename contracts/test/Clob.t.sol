@@ -192,6 +192,75 @@ contract ClobTest is Test {
         vm.expectRevert(Clob.NotOwner.selector);
         clob.cancelOrder(id);
     }
+
+    // ---------------------------------------------------------------------
+    // H2 (finance-2): expireEpoch must refund EVERY open order in one call
+    // ---------------------------------------------------------------------
+
+    function test_expireEpochRefundsAllOpenOrdersOneCall() public {
+        uint256 ep = clob.currentEpoch();
+        // three open buys (different sizes/prices) + one open sell
+        vm.startPrank(maker);
+        uint256 b1 = clob.placeOrder{value: 0.005e18}(true, ep, 5e18, 0.001e18);
+        uint256 b2 = clob.placeOrder{value: 0.01e18}(true, ep, 10e18, 0.001e18);
+        uint256 s1 = clob.placeOrder(false, ep, 5e18, 0.001e18); // sell escrows slots
+        vm.stopPrank();
+        vm.prank(taker);
+        uint256 b3 = clob.placeOrder{value: 0.004e18}(true, ep, 4e18, 0.001e18);
+
+        uint256 escrowed = address(clob).balance;
+        assertGt(escrowed, 0);
+        assertGt(slots.balanceOf(address(clob), ep), 0);
+
+        vm.roll(block.number + EPOCH_LEN);
+        clob.expireEpoch(ep);
+
+        (,,,,,, Clob.Status st1) = clob.orders(b1);
+        (,,,,,, Clob.Status st2) = clob.orders(b2);
+        (,,,,,, Clob.Status st3) = clob.orders(b3);
+        (,,,,,, Clob.Status st4) = clob.orders(s1);
+        assertEq(uint8(st1), uint8(Clob.Status.Expired));
+        assertEq(uint8(st2), uint8(Clob.Status.Expired));
+        assertEq(uint8(st3), uint8(Clob.Status.Expired));
+        assertEq(uint8(st4), uint8(Clob.Status.Expired));
+
+        // all escrow returned: ETH back to makers, slots back to seller
+        assertEq(address(clob).balance, 0, "ETH escrow fully refunded in one call");
+        assertEq(slots.balanceOf(address(clob), ep), 0, "slot escrow fully returned in one call");
+        assertEq(clob.openOrders(ep).length, 0);
+    }
+
+    function test_partialFillThenExpireRefundsRemainderExactlyOnce() public {
+        uint256 ep = clob.currentEpoch();
+        vm.prank(maker);
+        uint256 sellId = clob.placeOrder(false, ep, 10e18, 0.001e18);
+        vm.prank(taker);
+        uint256 buyId = clob.placeOrder{value: 0.01e18}(true, ep, 10e18, 0.001e18);
+
+        // partial fill: buyer wants 4 of the 10-sell — sell stays Open (C4)
+        vm.prank(maker);
+        uint256 partialSeller = clob.placeOrder(false, ep, 10e18, 0.001e18);
+        vm.prank(taker);
+        uint256 partialBuyer = clob.placeOrder{value: 0.004e18}(true, ep, 4e18, 0.001e18);
+        clob.matchOrders(partialBuyer, partialSeller);
+        (,,,,, uint256 filledS,) = clob.orders(partialSeller);
+        assertEq(filledS, 4e18, "partial fill recorded");
+        (,,,,,, Clob.Status stS) = clob.orders(partialSeller);
+        assertEq(uint8(stS), uint8(Clob.Status.Open), "partial fill stays Open");
+
+        uint256 escrowBefore = address(clob).balance; // 0.010 ETH open-buy escrow
+        assertEq(escrowBefore, 0.01e18);
+        vm.roll(block.number + EPOCH_LEN);
+        clob.expireEpoch(ep);
+
+        // remaining escrow refunded exactly once — a second expire is a no-op
+        assertEq(address(clob).balance, 0, "remaining escrow refunded");
+        assertEq(slots.balanceOf(address(clob), ep), 0);
+        clob.expireEpoch(ep); // re-call must not revert or double-refund
+        assertEq(address(clob).balance, 0);
+        (,,,,,, Clob.Status stB2) = clob.orders(buyId);
+        assertEq(uint8(stB2), uint8(Clob.Status.Expired), "unmatched buy also expired + refunded");
+    }
 }
 // ---------------------------------------------------------------------
 // §2 multi-pool registry — quote + executeRoute

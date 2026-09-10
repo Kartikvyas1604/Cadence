@@ -58,29 +58,38 @@ export function RejectLogPanel({ className = "" }: { className?: string }) {
           className="max-h-80 flex-1 space-y-2 overflow-y-auto pr-1"
           aria-label="Rejected swaps, newest first"
         >
-          {s.rejects.map((r) => (
-            <li
-              key={r.id}
-              className="enter rounded-md border border-border bg-surface-raised/60 p-3"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span
-                  className={`rounded-full border px-2 py-0.5 font-mono text-[11px] ${REASON_STYLE[r.reason]}`}
-                >
-                  {r.reason}
-                </span>
-                <span className="font-mono text-[11px] text-muted">
-                  {timeAgo(r.ts)}
-                </span>
-              </div>
-              <p className="mt-2 font-mono text-xs leading-5 text-muted">
-                blk {fmtBlock(r.blockNumber)} · epoch #{r.epochId} · size{" "}
-                <span className="tabular-nums text-foreground">
-                  {fmtEth(r.tradeSize)} <EthIcon />
-                </span>
-              </p>
-            </li>
-          ))}
+          {s.rejects.map((r) => {
+            const meta = REJECT_REASONS[r.reason];
+            return (
+              <li
+                key={r.id}
+                className="enter rounded-md border border-border bg-surface-raised/60 p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={`rounded-full border px-2 py-0.5 font-mono text-[11px] ${REASON_STYLE[r.reason]}`}
+                  >
+                    {meta?.title ?? r.reason}{" "}
+                    <span className="text-muted">— {r.reason}</span>
+                  </span>
+                  <span className="font-mono text-[11px] text-muted">
+                    {timeAgo(r.ts)}
+                  </span>
+                </div>
+                {r.detail && (
+                  <p className="mt-1.5 text-xs leading-5 text-muted">
+                    {r.detail}
+                  </p>
+                )}
+                <p className="mt-2 font-mono text-xs leading-5 text-muted">
+                  blk {fmtBlock(r.blockNumber)} · epoch #{r.epochId} · size{" "}
+                  <span className="tabular-nums text-foreground">
+                    {fmtEth(r.tradeSize)} <EthIcon />
+                  </span>
+                </p>
+              </li>
+            );
+          })}
         </ol>
       )}
     </Panel>

@@ -7,7 +7,7 @@ import { Panel } from "./panel";
 import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
 import { quoteSwapOutUsdc } from "@/lib/cadence/machine";
 import { fmtEth, fmtUsdc } from "@/lib/cadence/format";
-import type { RejectReason } from "@/lib/cadence/types";
+import { REJECT_REASONS, type RejectReason } from "@/lib/cadence/types";
 
 const DEMO_TOGGLES = [
   { key: "withoutSlot", label: "without slot", hint: "no cadence slot held" },
@@ -234,10 +234,11 @@ export function SwapPanel({ className = "" }: { className?: string }) {
                   />
                   <div className="text-sm leading-6">
                     <p className="font-medium text-danger">
-                      Reverted at beforeSwap
+                      {REJECT_REASONS[result.reason]?.title ??
+                        "Reverted at beforeSwap"}
                     </p>
                     <p className="font-mono text-xs text-muted">
-                      {result.reason}
+                      {REJECT_REASONS[result.reason]?.detail ?? result.reason}
                     </p>
                   </div>
                 </div>

@@ -101,7 +101,7 @@ export function ClobView() {
   const mine = s.wallet.address ? orders.filter((o) => o.maker.toLowerCase() === s.wallet.address?.toLowerCase()) : [];
 
   return (
-    <main className="flex-1">
+    <div className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-6 lg:px-8">
         <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">
           secondary market
@@ -151,7 +151,7 @@ export function ClobView() {
           <ClobFactsPanel className="lg:col-span-1" />
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 

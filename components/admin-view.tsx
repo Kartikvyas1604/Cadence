@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { EthIcon } from "@/components/eth-icon";
 import { useCadence, useCadenceActions } from "@/lib/cadence/provider";
@@ -21,7 +21,7 @@ export function AdminView() {
   const wired = useModuleProbe(s.chain.chainId, (d) => d.hook, adminAbi, "accruedProtocolRevenue");
 
   return (
-    <main className="flex-1">
+    <div className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-6 lg:px-8">
         <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">
           protocol treasury
@@ -40,7 +40,7 @@ export function AdminView() {
           <SplitPanel className="lg:col-span-1" wired={wired} />
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -63,6 +63,7 @@ function TreasuryPanel({
   const [accrued, setAccrued] = useState<number | null>(null);
   const [treasury, setTreasury] = useState<string | null>(null);
   const [nextTreasury, setNextTreasury] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const isTreasury =
     treasury != null &&
@@ -159,9 +160,16 @@ function TreasuryPanel({
             type="button"
             disabled={!isTreasury || pending || (accrued ?? 0) <= 0}
             onClick={async () => {
+              setError(null);
               setPending(true);
               try {
                 await withdrawProtocolRevenue();
+              } catch (e) {
+                setError(
+                  e instanceof Error
+                    ? `withdraw failed: ${e.message.slice(0, 140)}`
+                    : "withdraw failed",
+                );
               } finally {
                 setPending(false);
               }
@@ -192,10 +200,17 @@ function TreasuryPanel({
                   type="button"
                   disabled={!nextTreasury.startsWith("0x") || nextTreasury.length !== 42 || pending}
                   onClick={async () => {
+                    setError(null);
                     setPending(true);
                     try {
                       await setProtocolTreasury(nextTreasury);
                       setNextTreasury("");
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? `treasury rotation failed: ${e.message.slice(0, 140)}`
+                          : "treasury rotation failed",
+                      );
                     } finally {
                       setPending(false);
                     }
@@ -209,6 +224,15 @@ function TreasuryPanel({
                 Production: assign a Safe multisig, never an EOA.
               </p>
             </div>
+          ) : null}
+          {error ? (
+            <p
+              role="alert"
+              className="flex items-start gap-1.5 rounded-md border border-danger/50 bg-danger/5 p-2.5 text-xs leading-5 text-danger"
+            >
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              {error}
+            </p>
           ) : null}
           <p className="text-xs leading-5 text-muted">
             Withdraw is treasury-only{isTreasury ? "" : " — connect the treasury wallet to enable"}. Slot

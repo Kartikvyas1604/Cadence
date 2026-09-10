@@ -32,6 +32,12 @@ const PAGES = [
     title: "Intel",
     body: "One paid x402 call on Hedera writes the cadence-slot ask. Pay per quote.",
   },
+  {
+    href: "/swap",
+    icon: ArrowRight,
+    title: "Swap",
+    body: "beforeSwap checks slot ≥ size, burns the notional, fills against active depth only.",
+  },
 ] as const;
 
 export function HomeLinks() {
@@ -39,7 +45,7 @@ export function HomeLinks() {
     <section className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-20 lg:px-8">
       <div className="flex items-end justify-between gap-4">
         <h2 className="font-serif text-3xl tracking-tight text-foreground md:text-4xl">
-          Five rooms, one venue
+          Six rooms, one venue
         </h2>
         <Link
           href="/console"
@@ -49,7 +55,7 @@ export function HomeLinks() {
         </Link>
       </div>
 
-      <ul className="mt-8 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-5">
+      <ul className="mt-8 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-6">
         {PAGES.map((p) => (
           <li key={p.href} className="bg-surface">
             <Link

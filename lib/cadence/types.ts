@@ -106,6 +106,9 @@ export interface IntelQuote {
   rationale: string;
   source: string;
   costUsd: number;
+  /** M17: stable hash of the OBSERVED settlement proof (server-side), bound
+   *  to the on-chain ask via setSlotPriceFromIntel — null = unverified. */
+  settlementHash: string | null;
 }
 
 export interface Wallet {

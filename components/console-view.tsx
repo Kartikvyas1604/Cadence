@@ -12,7 +12,7 @@ import { PrivateIntentPanel } from "./private-intent-panel";
 const FACTS = [
   ["Invariant", "Passive reserves cannot unlock via same-block order splitting."],
   ["Slot honesty", "Unused cadence slots expire worthless at epoch refresh."],
-  ["Seat ≠ equity", "A slot is capacity, not a share of reserves."],
+  ["Slot ≠ equity", "A slot is capacity, not a share of reserves."],
   ["Depth is capped", "Fills quote active reserves only — never passive."],
 ];
 
@@ -38,7 +38,7 @@ function FactsCard({ className = "" }: { className?: string }) {
 
 export function ConsoleView() {
   return (
-    <main className="flex-1">
+    <div className="flex-1">
       <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-6 lg:px-8">
         <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">
           demo console
@@ -67,6 +67,6 @@ export function ConsoleView() {
           <FactsCard className="lg:col-span-2" />
         </div>
       </div>
-    </main>
+    </div>
   );
 }
