@@ -55,7 +55,10 @@ changes are redeploys + a new manifest, never upgrades.
 4. Run ≥1 public mint + one commit/reveal/consume on the deployed contracts
    and re-query until `mints`/`commits`/`reveals`/`consumes`/`swaps` are
    non-empty (H5 — a healthy proxy with empty entities is flagged by
-   `/api/health` as `graph.detail = "synced-but-empty"`).
+   `/api/health` as `graph.detail = "synced-but-empty"`). NOTE: every
+   re-publish creates a NEW version URL (e.g. `.../cadence/v2.0.0`) — the
+   old version URL stops resolving, so `GRAPH_ENDPOINT` must be updated to
+   the newest version in the app env (Vercel) at the same time.
 5. Set `GRAPH_ENDPOINT` + `GRAPH_API_KEY` in the app env.
 
 ## 3. Web app (Vercel)

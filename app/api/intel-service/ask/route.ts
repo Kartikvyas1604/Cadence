@@ -44,6 +44,7 @@ const FACILITATOR = process.env.FACILITATOR_URL || "https://api.testnet.blocky40
 const hookAbi = [
   { type: "function", name: "currentEpoch", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "epochCapacityEth", stateMutability: "view", inputs: [{ name: "", type: "uint256" }], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "activeEth", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "remainingCapacity", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "soldCapacityEth", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ];
@@ -78,20 +79,27 @@ async function computeAsk(hook: string) {
 }
 
 /**
- * Pre-flight pool read (H3): the hook must exist and report a non-zero epoch
- * capacity budget BEFORE any payment is taken. Read failure or zero capacity
- * → 503 intel_pool_unreadable, no settle, no quote.
+ * Pre-flight pool read (H3): the hook must exist AND hold reserves BEFORE
+ * any payment is taken. The epoch budget resets to zero at every epoch roll
+ * (the hook refreshes lazily on demand), so budget == 0 alone is NOT an
+ * empty pool — the discriminator is reserves: activeEth > 0 means the venue
+ * is seeded and the budget restores on the next refresh. Unreadable hook or
+ * a truly unseeded pool → 503 intel_pool_unreadable, no settle, no quote.
  */
 async function preflightPool(hook: string) {
   let capacity: bigint;
+  let activeEth: bigint;
   try {
     const pc = createPublicClient({ transport: http(RPC) });
     const epoch = await pc.readContract({ address: hook as `0x${string}`, abi: hookAbi, functionName: "currentEpoch" });
-    capacity = (await pc.readContract({ address: hook as `0x${string}`, abi: hookAbi, functionName: "epochCapacityEth", args: [epoch] })) as bigint;
+    [capacity, activeEth] = await Promise.all([
+      pc.readContract({ address: hook as `0x${string}`, abi: hookAbi, functionName: "epochCapacityEth", args: [epoch] }) as Promise<bigint>,
+      pc.readContract({ address: hook as `0x${string}`, abi: hookAbi, functionName: "activeEth" }) as Promise<bigint>,
+    ]);
   } catch {
     return false;
   }
-  return capacity > 0n;
+  return capacity > 0n || activeEth > 0n;
 }
 
 function paymentRequirements() {
