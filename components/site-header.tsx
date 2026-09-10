@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
-import { CadenceLogo, CadenceMark } from "./logo";
+import { CadenceMark } from "./logo";
 import { WalletButton } from "./wallet-button";
 import { NetworkSwitcher } from "./network-switcher";
 
@@ -85,17 +85,17 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 md:px-6 lg:px-8">
-        {/* logo: mark-only below sm — the wordmark is the overflow risk */}
+        {/* logo: ONE svg instance (duplicate gradient ids across a hidden +
+            visible pair break gradient resolution — the mark paints empty),
+            wordmark hides below sm where the mark alone brands */}
         <Link
           href="/"
-          className="shrink-0 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="flex shrink-0 items-center gap-2.5 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           aria-label="Cadence home"
         >
-          <span className="sm:hidden">
-            <CadenceMark size={28} />
-          </span>
-          <span className="hidden sm:flex">
-            <CadenceLogo />
+          <CadenceMark size={28} gradientId="cadence-g-header" />
+          <span className="hidden font-serif text-2xl leading-none tracking-tight text-foreground sm:inline">
+            Cadence
           </span>
         </Link>
 
