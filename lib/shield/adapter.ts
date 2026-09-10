@@ -5,10 +5,13 @@ import type { Address } from "viem";
  * unshield to a payer wallet, then pay for the cadence slot. The AMM swap
  * itself stays public — this path shields funds, not the swap.
  *
- * These adapters are the honest integration surface: the real SDKs
- * (@aztec/aztec.js / @railgun-community/quickstart) require their own
- * proof key + viewing-key setup. Until that lands, every call throws
- * NotWired — the UI shows the corresponding honest state. NEVER fake a tx.
+ * Railgun is WIRED via the real SDK (@railgun-community/quickstart) behind
+ * env gating (lib/shield/railgun.ts): calls route there when RAILGUN_* env
+ * is set, and throw NotWired otherwise — with the exact missing vars named.
+ * The heavy SDK loads lazily, so the default deployment never touches it.
+ * Aztec (@aztec/aztec.js) remains honestly NotWired — its 5.x client model
+ * requires a self-hosted Aztec node; wiring lands when AZTEC_* env is set.
+ * NEVER fake a tx.
  */
 
 export type ShieldProtocol = "railgun" | "aztec";
@@ -18,12 +21,18 @@ export interface ShieldParams {
   amountWei: string;
   /** destination private balance */
   memo?: string;
+  /** optional broadcaster (the caller's wallet sends the populated tx) */
+  broadcast?: (tx: { to: string; data: string; value: string }) => Promise<string>;
 }
 
 export interface UnshieldParams {
   /** the ephemeral wallet to pay the cadence slot from */
   to: Address;
   amountWei: string;
+  /** optional broadcaster (the caller's wallet sends the populated tx) */
+  broadcast?: (tx: { to: string; data: string; value: string }) => Promise<string>;
+  /** proof-generation progress (0–100) */
+  onProofProgress?: (progress: number) => void;
 }
 
 export interface ShieldBridgeTx {
@@ -36,27 +45,78 @@ export interface ShieldBridgeTx {
 }
 
 export class NotWired extends Error {
-  constructor(protocol: ShieldProtocol) {
+  constructor(protocol: ShieldProtocol, missingEnv: string[] = []) {
     super(
-      `${protocol} adapter not wired on this deployment — the SDK proof setup (proof key, viewing key, tree sync) has not been configured. Funds are NOT moved and nothing is simulated.`,
+      missingEnv.length > 0
+        ? `${protocol} adapter not configured on this deployment — missing env: ${missingEnv.join(", ")}. Funds are NOT moved and nothing is simulated.`
+        : `${protocol} adapter not wired on this deployment — the SDK proof setup (proof key, viewing key, tree sync) has not been configured. Funds are NOT moved and nothing is simulated.`,
     );
     this.name = "NotWired";
   }
 }
 
+/** Env names each protocol needs; surfaced verbatim when unconfigured. */
+const REQUIRED_ENV: Record<ShieldProtocol, string[]> = {
+  railgun: [
+    "RAILGUN_NETWORK",
+    "RAILGUN_RPC_URL",
+    "RAILGUN_MNEMONIC",
+    "RAILGUN_ENCRYPTION_KEY",
+    "RAILGUN_WALLET_ID",
+    "RAILGUN_SHIELD_PRIVATE_KEY",
+    "RAILGUN_ARTIFACTS_PATH",
+  ],
+  aztec: ["AZTEC_NODE_URL", "AZTEC_ACCOUNT_SECRET"],
+};
+
+export function missingEnvFor(protocol: ShieldProtocol): string[] {
+  return REQUIRED_ENV[protocol].filter((k) => !process.env[k]);
+}
+
+export function isConfigured(protocol: ShieldProtocol): boolean {
+  return missingEnvFor(protocol).length === 0;
+}
+
 /**
- * Shield into the private balance pool. Requires the protocol SDK with
- * its proof key configured (env: RAILGUN_PROOF_KEY / AZTEC_NODE_URL).
+ * Shield into the private balance. Railgun: real SDK flow via
+ * populateShieldBaseToken. Unset env ⇒ NotWired (funds are not moved).
  */
-export async function shield(_protocol: ShieldProtocol, _params: ShieldParams): Promise<string> {
-  throw new NotWired(_protocol);
+export async function shield(protocol: ShieldProtocol, params: ShieldParams): Promise<string> {
+  if (protocol === "railgun") {
+    const missing = missingEnvFor(protocol);
+    if (missing.length > 0) throw new NotWired(protocol, missing);
+    const { shieldRailgun } = await import("./railgun");
+    const { txHash } = await shieldRailgun(params.amountWei, { broadcast: params.broadcast });
+    if (!txHash) {
+      throw new Error(
+        "railgun_shield_pending: the populated shield tx was returned — broadcast it with your wallet to settle",
+      );
+    }
+    return txHash;
+  }
+  throw new NotWired(protocol, missingEnvFor(protocol));
 }
 
 /**
  * Unshield to the ephemeral payer that will commit/mint the cadence slot.
  */
-export async function unshieldTo(_protocol: ShieldProtocol, _params: UnshieldParams): Promise<string> {
-  throw new NotWired(_protocol);
+export async function unshieldTo(protocol: ShieldProtocol, params: UnshieldParams): Promise<string> {
+  if (protocol === "railgun") {
+    const missing = missingEnvFor(protocol);
+    if (missing.length > 0) throw new NotWired(protocol, missing);
+    const { unshieldRailgun } = await import("./railgun");
+    const { txHash } = await unshieldRailgun(params.to, params.amountWei, {
+      broadcast: params.broadcast,
+      onProofProgress: params.onProofProgress,
+    });
+    if (!txHash) {
+      throw new Error(
+        "railgun_unshield_pending: the proved unshield tx was returned — broadcast it with your wallet to settle",
+      );
+    }
+    return txHash;
+  }
+  throw new NotWired(protocol, missingEnvFor(protocol));
 }
 
 /**

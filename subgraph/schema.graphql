@@ -20,7 +20,7 @@ The entity id is the COMMITMENT HASH H (finance-6) — the reveal handler
 loads CadenceCommit.load(H) and the reveal link always resolves. Mutable
 so the reveal link can be written when the reveal event lands.
 """
-type CadenceCommit @entity {
+type CadenceCommit @entity(immutable: false) {
   id: ID!
   epochId: BigInt!
   H: Bytes!

@@ -6,11 +6,11 @@ export { shield, unshieldTo, shieldToCadencePayer, NotWired, type ShieldParams, 
 
 export const PROTOCOL = "aztec" as const;
 export const SETUP_DOC = {
-  sdk: "@aztec/aztec.js",
-  env: ["AZTEC_NODE_URL", "AZTEC_PXE_URL"],
+  sdk: "@aztec/aztec.js@5.x (installed; wiring lands when AZTEC_* env is set)",
+  env: ["AZTEC_NODE_URL", "AZTEC_ACCOUNT_SECRET"],
   flow: [
-    "connect PXE → register the recipient account",
-    "shield: token transfer into the private note pool",
+    "connect the Aztec node → register/fund the account",
+    "shield: transfer into the private note pool",
     "unshield to the ephemeral EOA that pays for the cadence slot",
   ],
   invariant: "Shields funds, not the swap — beforeSwap stays public.",

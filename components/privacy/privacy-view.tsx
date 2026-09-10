@@ -223,9 +223,11 @@ function ShieldFundPanel({ className = "" }: { className?: string }) {
         </ol>
 
         <LpNotice kind="warn">
-          Adapter not wired on this chain yet — the Railgun / Aztec shield and
-          unshield calls land with lib/railgun and lib/aztec. The commit-reveal
-          path above works today.
+          Railgun is wired behind env gating — the real SDK flow runs when
+          RAILGUN_* env is set on this deployment, and every call with env
+          unset fails closed naming the missing vars. Aztec lands when
+          AZTEC_NODE_URL + AZTEC_ACCOUNT_SECRET are configured. The
+          commit-reveal path above works today.
         </LpNotice>
 
         <p className="text-xs leading-5 text-muted">

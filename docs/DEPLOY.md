@@ -44,13 +44,19 @@ changes are redeploys + a new manifest, never upgrades.
 1. `cd subgraph && pnpm install && pnpm codegen` (regenerates types from the
    refreshed ABIs under `subgraph/abis/`), then `pnpm build`.
 2. Confirm `subgraph.yaml` addresses match `public/deployments/<chainId>.json`
-   exactly (hook + slots) and `startBlock` is ≤ the deploy block.
-3. Publish to Studio (`pnpm deploy`), verify sync, then run at least one
-   public mint + one commit/reveal/consume on the deployed contracts and
-   re-query until `mints`/`commits`/`reveals`/`consumes`/`swaps` are
+   exactly (hook + slots). **Fast-sync tip:** `startBlock` ≤ deploy block
+   keeps full history, but when the entity set is empty anyway (demo) set it
+   to a recent block so the re-publish catches up instantly — the current
+   yaml uses the fresh demo-tx block so live mints/consumes/swaps appear
+   without a days-long crawl.
+3. `graph auth <STUDIO_DEPLOY_KEY>` (deploy-scope token — NOT the query
+   `GRAPH_API_KEY`), then publish to Studio (`pnpm deploy` /
+   `graph deploy --studio <slug>`).
+4. Run ≥1 public mint + one commit/reveal/consume on the deployed contracts
+   and re-query until `mints`/`commits`/`reveals`/`consumes`/`swaps` are
    non-empty (H5 — a healthy proxy with empty entities is flagged by
    `/api/health` as `graph.detail = "synced-but-empty"`).
-4. Set `GRAPH_ENDPOINT` + `GRAPH_API_KEY` in the app env.
+5. Set `GRAPH_ENDPOINT` + `GRAPH_API_KEY` in the app env.
 
 ## 3. Web app (Vercel)
 
