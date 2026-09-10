@@ -40,3 +40,8 @@ Cadence.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# subgraph
+subgraph/node_modules/
+subgraph/build/
+subgraph/generated/
