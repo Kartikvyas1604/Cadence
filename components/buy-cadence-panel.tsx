@@ -14,6 +14,7 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
   const { buySlot } = useCadenceActions();
   const [size, setSize] = useState<number>(2);
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const ask = s.slotPricePerEth;
   const cost = ask !== null ? size * ask : null;
