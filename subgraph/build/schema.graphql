@@ -78,7 +78,7 @@ type CadenceSwap @entity(immutable: true) {
 """
 Per-epoch active/passive partition — the depth ledger.
 """
-type PoolState @entity(immutable: true) {
+type PoolState @entity(immutable: false) {
   id: ID!
   epochId: BigInt!
   activeEth: BigInt!
@@ -89,7 +89,7 @@ type PoolState @entity(immutable: true) {
   timestamp: BigInt!
 }
 
-type Global @entity(immutable: true) {
+type Global @entity(immutable: false) {
   id: ID!
   totalMinted: BigInt!
   totalCommitted: BigInt!
