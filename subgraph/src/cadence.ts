@@ -18,7 +18,7 @@ import {
 
 const GLOBAL_ID = "global";
 
-function bump(field: string, amount: i64 = 1): void {
+function bump(field: string, amount: i32 = 1): void {
   let g = Global.load(GLOBAL_ID);
   if (g == null) {
     g = new Global(GLOBAL_ID);
@@ -41,9 +41,7 @@ function bump(field: string, amount: i64 = 1): void {
 // ---------------------------------------------------------------------
 
 export function handleSlotMinted(event: SlotMinted): void {
-  const e = new CadenceMint(
-    event.transaction.hash.concatI32(event.logIndex.toI32()),
-  );
+  const e = new CadenceMint(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
   e.epochId = event.params.epochId;
   e.buyer = event.params.buyer;
   e.size = event.params.size;
@@ -56,9 +54,7 @@ export function handleSlotMinted(event: SlotMinted): void {
 }
 
 export function handleSlotCommitted(event: SlotCommitted): void {
-  const e = new CadenceCommit(
-    event.transaction.hash.concatI32(event.logIndex.toI32()),
-  );
+  const e = new CadenceCommit(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
   e.epochId = event.params.epochId;
   e.H = event.params.H;
   e.payer = event.params.payer;
@@ -71,9 +67,7 @@ export function handleSlotCommitted(event: SlotCommitted): void {
 }
 
 export function handleSlotRevealed(event: SlotRevealed): void {
-  const e = new CadenceReveal(
-    event.transaction.hash.concatI32(event.logIndex.toI32()),
-  );
+  const e = new CadenceReveal(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
   e.epochId = event.params.epochId;
   e.H = event.params.H;
   e.trader = event.params.trader;
@@ -94,9 +88,7 @@ export function handleSlotRevealed(event: SlotRevealed): void {
 }
 
 export function handleSlotConsumed(event: SlotConsumed): void {
-  const e = new CadenceConsume(
-    event.transaction.hash.concatI32(event.logIndex.toI32()),
-  );
+  const e = new CadenceConsume(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
   e.epochId = event.params.epochId;
   e.trader = event.params.trader;
   e.size = event.params.size;
@@ -112,9 +104,7 @@ export function handleSlotConsumed(event: SlotConsumed): void {
 // ---------------------------------------------------------------------
 
 export function handleCadenceSwap(event: CadenceSwap): void {
-  const e = new CadenceSwapEntity(
-    event.transaction.hash.concatI32(event.logIndex.toI32()),
-  );
+  const e = new CadenceSwapEntity(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
   e.epochId = event.params.epochId;
   e.trader = event.params.trader;
   e.zeroForOne = event.params.zeroForOne;
