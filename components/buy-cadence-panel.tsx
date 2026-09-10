@@ -30,7 +30,9 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
     if (pending || !connected || ask === null || !contractsReady || insufficient) return;
     setPending(true);
     try {
-      await buySlot(size);
+      await buySlot(size).catch((e) => {
+        setError(e instanceof Error ? e.message.slice(0, 140) : "mint failed");
+      });
     } finally {
       setPending(false);
     }
