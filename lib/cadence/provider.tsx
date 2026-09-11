@@ -179,6 +179,16 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     walletRef.current = wallet.address && chain.chainId ? walletClientFor((window as unknown as { ethereum: unknown }).ethereum, chain.chainId) : null;
   }, [wallet.address, chain.chainId]);
 
+  // mirror the connected wallet into reducer state — requireReady() reads it
+  // from stateRef; without this every write is a silent no-op
+  useEffect(() => {
+    if (wallet.address) {
+      dispatch({ type: "WALLET_CONNECT", address: wallet.address, eth: wallet.ethBalance });
+    } else {
+      dispatch({ type: "WALLET_DISCONNECT" });
+    }
+  }, [wallet.address, wallet.ethBalance]);
+
   // ------------------------------------------------------------------
   // Chain truth: poll reserves + slot balance on every new block
   // ------------------------------------------------------------------

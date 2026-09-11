@@ -86,6 +86,9 @@ export type Action =
   | { type: "SWAP_REJECTED"; reason: RejectEvent["reason"]; tradeSize: number; detail: string }
   | { type: "INTEL_QUOTE"; quote: IntelQuote }
   | { type: "INTEL_ERROR"; message: string }
+  /** connected wallet lands in reducer state — writes read it via stateRef */
+  | { type: "WALLET_CONNECT"; address: string; eth: number | null }
+  | { type: "WALLET_DISCONNECT" }
   /** Deployment manifest found for this chain — pools/panels unlock. */
   | { type: "DEPLOYMENT_LOADED"; pool: NonNullable<WorldState["pool"]>; slotPricePerEth: number }
   /** Ground truth from the hook: reserves + written ask. */
@@ -327,6 +330,20 @@ export function reducer(state: WorldState, action: Action): WorldState {
 
     case "SWAP_REJECTED": {
       return addReject(state, action.reason, action.tradeSize, action.detail);
+    }
+
+    case "WALLET_CONNECT": {
+      return {
+        ...state,
+        wallet: { ...state.wallet, address: action.address, eth: action.eth },
+      };
+    }
+
+    case "WALLET_DISCONNECT": {
+      return {
+        ...state,
+        wallet: { address: null, eth: null, slot: null },
+      };
     }
 
     case "INTEL_QUOTE": {
