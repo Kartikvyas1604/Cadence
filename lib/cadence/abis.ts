@@ -162,7 +162,10 @@ export const clobAbi = [
 export const routerRegistryAbi = [
   { type: "function", name: "registerPool", stateMutability: "nonpayable", inputs: [{ name: "key", type: "tuple", components: [{ name: "currency0", type: "address" }, { name: "currency1", type: "address" }, { name: "fee", type: "uint24" }, { name: "tickSpacing", type: "int24" }, { name: "hooks", type: "address" }] }], outputs: [] },
   { type: "function", name: "poolCount", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
-  { type: "function", name: "quoteRoute", stateMutability: "view", inputs: [{ name: "sizeEth", type: "uint256" }, { name: "zeroForOne", type: "bool" }], outputs: [{ name: "", type: "tuple[]" }] },
+  // quoteRoute returns FOUR PARALLEL ARRAYS (matches CadenceRouter.quoteRoute):
+  // (bytes32[] poolIds, address[] hooks, uint256[] remaining, uint256[] slotPrice)
+  // — the old tuple[] declaration decoded to an "unknown error"
+  { type: "function", name: "quoteRoute", stateMutability: "view", inputs: [{ name: "sizeEth", type: "uint256" }, { name: "zeroForOne", type: "bool" }], outputs: [{ name: "poolIds", type: "bytes32[]" }, { name: "hooks", type: "address[]" }, { name: "remaining", type: "uint256[]" }, { name: "slotPrice", type: "uint256[]" }] },
   { type: "function", name: "executeRoute", stateMutability: "payable", inputs: [{ name: "poolId", type: "bytes32" }, { name: "sizeEth", type: "uint256" }], outputs: [] },
   { type: "event", name: "PoolRegistered", inputs: [{ name: "poolId", type: "bytes32", indexed: true }, { name: "hook", type: "address", indexed: true }] },
   { type: "event", name: "RouteExecuted", inputs: [{ name: "poolId", type: "bytes32", indexed: true }, { name: "trader", type: "address", indexed: true }, { name: "sizeEth", type: "uint256", indexed: false }] },
