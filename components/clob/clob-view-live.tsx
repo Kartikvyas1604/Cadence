@@ -76,7 +76,9 @@ export function ClobView() {
           return {
             id: Number(id),
             maker: o[0],
-            side: o[1] ? "buy" : "sell",
+            // Side enum on-chain: Buy = 0, Sell = 1 — the bool-typed ABI
+            // decodes Buy to false, so invert here or every buy shows as sell
+            side: o[1] ? "sell" : "buy",
             epochId: Number(o[2]),
             size: Number(formatUnits(o[3], 18)),
             price: Number(formatUnits(o[4], 18)),
