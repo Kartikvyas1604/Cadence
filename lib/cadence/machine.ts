@@ -96,7 +96,12 @@ export type Action =
   /** Live mintable capacity for the current epoch (λ × hook balance − sold). */
   | { type: "CAPACITY_SYNC"; buyCapacityEth: number }
   /** ERC-1155 slot balance of the connected wallet for the CURRENT epoch. */
-  | { type: "WALLET_SLOT_SYNC"; capacity: number }
+  | {
+      type: "WALLET_SLOT_SYNC";
+      capacity: number;
+      /** last epoch's still-unexpired-balance — shown as an honest expiry */
+      expired?: { epochId: number; capacity: number } | null;
+    }
   /** LP module availability probe result. */
   | { type: "LP_AVAILABLE"; available: boolean }
   /** LP position + protocol constants, all from contract reads. */
@@ -462,13 +467,17 @@ export function reducer(state: WorldState, action: Action): WorldState {
 
     case "WALLET_SLOT_SYNC": {
       const epochId = state.chain.epochId;
-      if (action.capacity <= 0) {
-        return state.wallet.slot ? { ...state, wallet: { ...state.wallet, slot: null } } : state;
-      }
-      return {
-        ...state,
-        wallet: { ...state.wallet, slot: { epochId: epochId ?? 0, capacity: action.capacity } },
-      };
+      const expiredSlot =
+        action.expired === undefined ? (state.wallet.expiredSlot ?? null) : action.expired;
+      const slot =
+        action.capacity > 0 ? { epochId: epochId ?? 0, capacity: action.capacity } : null;
+      const unchanged =
+        (state.wallet.slot == null) === (slot == null) &&
+        state.wallet.expiredSlot?.epochId === expiredSlot?.epochId &&
+        state.wallet.expiredSlot?.capacity === expiredSlot?.capacity &&
+        (slot == null || (state.wallet.slot != null && state.wallet.slot.capacity === slot.capacity));
+      if (unchanged) return state;
+      return { ...state, wallet: { ...state.wallet, slot, expiredSlot } };
     }
 
     default:

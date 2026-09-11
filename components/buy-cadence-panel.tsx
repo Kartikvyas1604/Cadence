@@ -108,9 +108,18 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
               ? `No cadence slot for epoch #${s.chain.epochId}`
               : "No cadence slot"}
           </p>
-          <p className="mt-1 text-xs text-muted">
-            Swaps will revert at beforeSwap until you mint one.
-          </p>
+          {s.wallet.expiredSlot ? (
+            <p className="mt-1 rounded-md border border-danger/40 bg-danger/5 p-2 text-xs leading-5 text-danger">
+              You held {fmtEth(s.wallet.expiredSlot.capacity)} for epoch #
+              {s.wallet.expiredSlot.epochId} — it{" "}
+              <span className="font-medium">expired worthless</span> at refresh.
+              Mint a new one for this epoch.
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted">
+              Swaps will revert at beforeSwap until you mint one.
+            </p>
+          )}
         </div>
       )}
 

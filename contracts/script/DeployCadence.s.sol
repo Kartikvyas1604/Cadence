@@ -121,7 +121,7 @@ contract DeployCadence is Script {
         returns (address routerAddr, address slotsAddr)
     {
         bytes memory codeRouter = abi.encodePacked(type(CadenceRouter).creationCode, abi.encode(manager, usdcAddr));
-        bytes32 saltRouter = keccak256("cadence.router.v4");
+        bytes32 saltRouter = keccak256(bytes(vm.envOr("SALT_VERSION", string("v4"))));
         routerAddr = predict(CREATE2_FACTORY, saltRouter, codeRouter);
         new CadenceRouter{salt: saltRouter}(manager, usdcAddr);
         console2.log("deployed router", routerAddr);
@@ -129,7 +129,9 @@ contract DeployCadence is Script {
         bytes memory codeSlots = abi.encodePacked(
             type(CadenceSlots).creationCode, abi.encode(p.pricePerEth, p.pricePerEth * 2, "", deployerOwner)
         );
-        bytes32 saltSlots = keccak256("cadence.slots.v4");
+        // slots salt is version-bumped per redeploy: the immutable CREATE2
+        // address of the previous live deployment can never be reused
+        bytes32 saltSlots = keccak256(bytes(vm.envOr("SALT_VERSION", string("v4"))));
         slotsAddr = predict(CREATE2_FACTORY, saltSlots, codeSlots);
         new CadenceSlots{salt: saltSlots}(p.pricePerEth, p.pricePerEth * 2, "", deployerOwner);
         console2.log("deployed slots", slotsAddr);

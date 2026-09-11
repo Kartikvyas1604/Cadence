@@ -249,8 +249,34 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
             functionName: "slotOf",
             args: [wallet.address as `0x${string}`],
           })) as bigint;
+          // previous-epoch balance — surfaced as an honest "expired" note
+          const epochLen = d.epochLengthBlocks || 12;
+          const prevEpoch =
+            chain.blockNumber != null
+              ? Math.floor(chain.blockNumber / epochLen) - 1
+              : null;
+          let expired: { epochId: number; capacity: number } | null = null;
+          if (prevEpoch != null && prevEpoch >= 0) {
+            try {
+              const prevBal = (await pc.readContract({
+                address: d.slots,
+                abi: slotsAbi,
+                functionName: "balanceOf",
+                args: [wallet.address as `0x${string}`, BigInt(prevEpoch)],
+              })) as bigint;
+              if (prevBal > 0n) {
+                expired = { epochId: prevEpoch, capacity: toEth(prevBal) };
+              }
+            } catch {
+              /* keep last */
+            }
+          }
           if (!alive) return;
-          dispatch({ type: "WALLET_SLOT_SYNC", capacity: toEth(slot) });
+          dispatch({
+            type: "WALLET_SLOT_SYNC",
+            capacity: toEth(slot),
+            expired,
+          });
         } catch {
           /* keep last */
         }

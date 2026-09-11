@@ -119,6 +119,9 @@ export interface Wallet {
   /** ERC-1155 balance: capacity notional held for the CURRENT epoch only —
    *  real once the cadence hook contract is connected */
   slot: { epochId: number; capacity: number; commitmentId?: number } | null;
+  /** the wallet held capacity for a PAST epoch — it expired worthless at
+   *  refresh; shown as an honest expiry note instead of a silent zero */
+  expiredSlot?: { epochId: number; capacity: number } | null;
 }
 
 /** LP position — all values are contract reads (null until the LP module
