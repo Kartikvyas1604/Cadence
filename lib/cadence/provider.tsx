@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { PublicClient, WalletClient } from "viem";
+import type { Abi, PublicClient, WalletClient } from "viem";
 import { formatUnits, parseUnits } from "viem";
 import { initialWorld, reducer } from "./machine";
 import type { IntelQuote, RejectReason, WorldState } from "./types";
@@ -39,7 +39,7 @@ const ActionsContext = createContext<{
   ) => Promise<"filled" | RejectReason>;
   attemptBadReveal: (sizeEth: number) => Promise<"filled" | RejectReason>;
   refreshIntel: () => Promise<boolean>;
-  depositLpEth: (sizeEth: number) => Promise<boolean>;
+  depositLpEth: (sizeEth: number) => Promise<void>;
   withdrawLpEth: (sharesEth: number) => Promise<void>;
   applyAsk: (askEth: number) => Promise<void>;
   withdrawProtocolRevenue: () => Promise<void>;
@@ -103,6 +103,8 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const publicRef = useRef<PublicClient | null>(null);
   const deploymentRef = useRef<CadenceDeployment | null>(null);
   const commitmentRef = useRef<CommitmentLocal | null>(null);
+  /** real reason the last write failed — surfaced in page-level errors */
+  const lastWriteError = useRef<string | null>(null);
   const [deploymentReady, setDeploymentReady] = useState(false);
   const deploymentChainRef = useRef<number | null>(null);
 
@@ -347,17 +349,19 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       pc: PublicClient,
       sizeEth: number,
     ): Promise<"filled" | RejectReason> => {
-      let hash: `0x${string}`;
-      try {
-        hash = await write();
-      } catch (e: unknown) {
-        // wallet-level rejection or pre-simulation revert — extract data
-        const data =
-          (e as { data?: string })?.data ??
-          (e as { details?: string })?.details ??
-          (e instanceof Error ? e.message : "");
-        const r = rejectFromRevert(data.startsWith("0x") ? data : undefined);
-        dispatch({
+    let hash: `0x${string}`;
+    try {
+      hash = await write();
+    } catch (e: unknown) {
+      // wallet-level rejection or pre-simulation revert — extract data
+      const data =
+        (e as { data?: string })?.data ??
+        (e as { details?: string })?.details ??
+        (e instanceof Error ? e.message : "");
+      const r = rejectFromRevert(data.startsWith("0x") ? data : undefined);
+      lastWriteError.current =
+        e instanceof Error ? e.message.slice(0, 160) : "transaction failed";
+      dispatch({
           type: "SWAP_REJECTED",
           reason: r?.reason ?? "no-slot",
           tradeSize: sizeEth,
@@ -367,6 +371,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       }
       const receipt = await pc.waitForTransactionReceipt({ hash });
       if (receipt.status === "reverted") {
+        lastWriteError.current = "transaction reverted at execution";
         dispatch({
           type: "SWAP_REJECTED",
           reason: "no-slot",
@@ -376,6 +381,40 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
         return "no-slot";
       }
       return "filled";
+    },
+    [],
+  );
+
+  /** Dry-run the call against the public RPC BEFORE the wallet popup — a
+   *  reverting call surfaces its decoded reason without ever opening the
+   *  wallet, and nothing is sent. */
+  const simulateFirst = useCallback(
+    async (
+      pc: PublicClient,
+      call: {
+        address: `0x${string}`;
+        abi: Abi;
+        functionName: string;
+        args?: readonly unknown[];
+        value?: bigint;
+      },
+      account: `0x${string}`,
+    ) => {
+      try {
+        await pc.simulateContract({ ...call, account } as Parameters<typeof pc.simulateContract>[0]);
+      } catch (e: unknown) {
+        const detail =
+          (e as { shortMessage?: string })?.shortMessage ??
+          (e as { details?: string })?.details ??
+          (e instanceof Error ? e.message : "simulation failed");
+        lastWriteError.current = detail.slice(0, 160);
+        const dErr = detail.match(/\b(ZeroSwap|CapacityExceeded|InsufficientEscrow|UnsafeWithdraw|BadReveal|ZeroSize|EpochExpired|PassiveUnlock|OversizeVsSlot|OversizeVsActive|NoCadenceSlot)\(\)/);
+        throw new Error(
+          dErr
+            ? `${dErr[1]} — the transaction would revert on-chain, so it was not sent to your wallet. ${detail.slice(0, 120)}`
+            : `transaction would revert on-chain — not sent. ${detail.slice(0, 120)}`,
+        );
+      }
     },
     [],
   );
@@ -392,6 +431,13 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       const cost = (sizeWei * BigInt(d.pricePerEth)) / parseUnits("1", 18);
       const value = cost + parseUnits("0.05", 18); // buffer for refund
       const account = s.wallet.address as `0x${string}`;
+      await simulateFirst(pc, {
+        address: d.slots,
+        abi: slotsAbi,
+        functionName: "mintPublic",
+        args: [sizeWei],
+        value,
+      }, account);
       const ok = await sendTx(
         () =>
           wc.writeContract({
@@ -571,8 +617,26 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const depositLpEth = useCallback(
     async (sizeEth: number) => {
       const ctx = requireReady();
-      if (!ctx || stateRef.current.lp.available !== true) return false;
+      if (!ctx) {
+        throw new Error(
+          "wallet session expired — reconnect your wallet (header button) and try again",
+        );
+      }
+      if (stateRef.current.lp.available !== true) {
+        throw new Error(
+          "the LP accounting module is not wired on this chain yet — no transaction was sent",
+        );
+      }
       const { pc, wc, d } = ctx;
+      const value = parseUnits(String(sizeEth), 18);
+      const account = ctx.s.wallet.address as `0x${string}`;
+      await simulateFirst(pc, {
+        address: d.hook,
+        abi: lpModuleAbi,
+        functionName: "depositEth",
+        args: [],
+        value,
+      }, account);
       const ok = await sendTx(
         () =>
           wc.writeContract({
@@ -580,19 +644,23 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
             abi: lpModuleAbi,
             functionName: "depositEth",
             args: [],
-            account: ctx.s.wallet.address as `0x${string}`,
+            account,
             chain: null,
-            value: parseUnits(String(sizeEth), 18),
+            value,
           }),
         pc,
         sizeEth,
       );
       if (ok === "filled") {
-        void wallet.refreshBalance(ctx.s.wallet.address as `0x${string}`);
+        void wallet.refreshBalance(account);
+        return;
       }
-      return ok === "filled";
+      // no fake success: rejected in the wallet or reverted at execution
+      throw new Error(
+        `deposit did not go through — no ETH left your wallet. Reason: ${lastWriteError.current ?? "wallet rejected the request"}`,
+      );
     },
-    [requireReady, sendTx, wallet.refreshBalance],
+    [requireReady, sendTx, simulateFirst, wallet.refreshBalance],
   );
 
   const withdrawLpEth = useCallback(

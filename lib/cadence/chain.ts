@@ -5,26 +5,24 @@ import { useEffect, useState } from "react";
 /**
  * Public RPC endpoints per chain — reads real chain state (eth_chainId,
  * eth_blockNumber) over JSON-RPC. Override with NEXT_PUBLIC_RPC_URL.
+ * Only chains where Cadence has a deployment (plus local anvil) are listed —
+ * every other network is answered with an honest "unsupported network" state
+ * instead of firing fetches a strict CSP would block.
  */
 const PUBLIC_RPC: Record<number, string> = {
-  1: "https://eth.llamarpc.com",
-  8453: "https://base.llamarpc.com",
   11155111: "https://ethereum-sepolia-rpc.publicnode.com",
   84532: "https://base-sepolia-rpc.publicnode.com",
-  10: "https://optimism-rpc.publicnode.com",
-  42161: "https://arbitrum-one-rpc.publicnode.com",
-  137: "https://polygon-bor-rpc.publicnode.com",
+  31337: "http://localhost:8545",
 };
 
-const DEFAULT_RPC = "https://eth.llamarpc.com";
-const POLL_MS = 2000;
-
-export function rpcForChain(chainId: number | null): string {
+export function rpcForChain(chainId: number | null): string | null {
   const env = process.env.NEXT_PUBLIC_RPC_URL;
   if (env) return env;
   if (chainId != null && PUBLIC_RPC[chainId]) return PUBLIC_RPC[chainId];
-  return DEFAULT_RPC;
+  return null;
 }
+
+const POLL_MS = 2000;
 
 function hexToNumber(hex: unknown): number | null {
   if (typeof hex !== "string") return null;
@@ -47,11 +45,26 @@ export function useChainState(walletChainId: number | null) {
   const rpc = rpcForChain(walletChainId);
 
   useEffect(() => {
+    // no venue chain picked (wallet not connected / on an unlisted chain) —
+    // hold the honest waiting state instead of fetching a blocked endpoint
+    if (!rpc) {
+      queueMicrotask(() => {
+        setChainId(null);
+        setBlockNumber(null);
+        setError(
+          walletChainId == null
+            ? "connect a wallet"
+            : "unsupported network — switch to Sepolia or Base Sepolia",
+        );
+      });
+      return;
+    }
     let alive = true;
+    const endpoint = rpc;
     const controller = new AbortController();
 
     async function rpcCall(method: string, params: unknown[] = []) {
-      const res = await fetch(rpc, {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),

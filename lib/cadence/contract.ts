@@ -3,14 +3,17 @@
 import { createPublicClient, createWalletClient, custom, http, type PublicClient, type WalletClient } from "viem";
 
 const RPC_BY_CHAIN: Record<number, string> = {
-  1: "https://eth.llamarpc.com",
-  84532: "https://base-sepolia-rpc.publicnode.com",
   11155111: "https://ethereum-sepolia-rpc.publicnode.com",
+  84532: "https://base-sepolia-rpc.publicnode.com",
   31337: "http://localhost:8545",
 };
 
 export function rpcUrlFor(chainId: number): string {
-  return process.env.NEXT_PUBLIC_RPC_URL || RPC_BY_CHAIN[chainId] || "https://eth.llamarpc.com";
+  return (
+    process.env.NEXT_PUBLIC_RPC_URL ||
+    RPC_BY_CHAIN[chainId] ||
+    RPC_BY_CHAIN[11155111]
+  );
 }
 
 export function publicClientFor(_chainId: number): PublicClient {

@@ -20,6 +20,7 @@ function connectAllowlist(): string {
       "'self'",
       "https://ethereum-sepolia-rpc.publicnode.com",
       "https://base-sepolia-rpc.publicnode.com",
+      "http://localhost:8545",
       "https://api.studio.thegraph.com",
       "https://api.testnet.blocky402.com",
     ].join(" ")
