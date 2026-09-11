@@ -189,6 +189,13 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [wallet.address, wallet.ethBalance]);
 
+  // mirror live chain truth into reducer state — the machine stamps slots,
+  // fills, rejects and commits with the real epoch; without this the minted
+  // slot carries epoch 0 and never matches (invisible everywhere)
+  useEffect(() => {
+    dispatch({ type: "CHAIN_SYNC", chainId: chain.chainId, blockNumber: chain.blockNumber });
+  }, [chain.chainId, chain.blockNumber]);
+
   // ------------------------------------------------------------------
   // Chain truth: poll reserves + slot balance on every new block
   // ------------------------------------------------------------------

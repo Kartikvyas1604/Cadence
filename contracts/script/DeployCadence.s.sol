@@ -45,6 +45,7 @@ contract DeployCadence is Script {
         uint256 lambda;
         uint256 epochLen;
         uint256 pricePerEth;
+        uint256 minEscrow;
         uint256 seedEthAmt;
         uint256 seedUsdcAmt;
         uint256 swapFeeBps;
@@ -73,6 +74,10 @@ contract DeployCadence is Script {
             lambda: uint256(vm.envOr("LAMBDA_BPS", uint256(LAMBDA_DEFAULT))),
             epochLen: uint256(vm.envOr("EPOCH_LENGTH", uint256(EPOCH_DEFAULT))),
             pricePerEth: uint256(vm.envOr("SLOT_PRICE_ETH", uint256(PRICE_DEFAULT))),
+            // MIN_ESCROW bounds the capacity a commitment reserves (escrow/ask).
+            // Default 2×ask reserves 2 ETH — deadlocks any venue seeded with
+            // less than 8 ETH; override to fit the live budget.
+            minEscrow: uint256(vm.envOr("MIN_ESCROW", uint256(2 * PRICE_DEFAULT))),
             seedEthAmt: uint256(vm.envOr("SEED_ETH", uint256(1000e18))),
             seedUsdcAmt: uint256(vm.envOr("SEED_USDC", uint256(3_000_000e18))),
             swapFeeBps: uint256(vm.envOr("SWAP_FEE_BPS", uint256(30))),
@@ -127,13 +132,13 @@ contract DeployCadence is Script {
         console2.log("deployed router", routerAddr);
 
         bytes memory codeSlots = abi.encodePacked(
-            type(CadenceSlots).creationCode, abi.encode(p.pricePerEth, p.pricePerEth * 2, "", deployerOwner)
+            type(CadenceSlots).creationCode, abi.encode(p.pricePerEth, p.minEscrow, "", deployerOwner)
         );
         // slots salt is version-bumped per redeploy: the immutable CREATE2
         // address of the previous live deployment can never be reused
         bytes32 saltSlots = keccak256(bytes(vm.envOr("SALT_VERSION", string("v4"))));
         slotsAddr = predict(CREATE2_FACTORY, saltSlots, codeSlots);
-        new CadenceSlots{salt: saltSlots}(p.pricePerEth, p.pricePerEth * 2, "", deployerOwner);
+        new CadenceSlots{salt: saltSlots}(p.pricePerEth, p.minEscrow, "", deployerOwner);
         console2.log("deployed slots", slotsAddr);
     }
 

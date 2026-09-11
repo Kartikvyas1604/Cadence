@@ -1,6 +1,6 @@
 import { keccak256, toHex } from "viem";
 import type { IntelQuote, PricePoint, RejectEvent, WorldState } from "./types";
-import { REJECT_REASONS } from "./types";
+import { REJECT_REASONS, EPOCH_LENGTH_BLOCKS } from "./types";
 import { commitHash } from "./hash";
 
 function saltToHex(salt: string): `0x${string}` {
@@ -89,6 +89,8 @@ export type Action =
   /** connected wallet lands in reducer state — writes read it via stateRef */
   | { type: "WALLET_CONNECT"; address: string; eth: number | null }
   | { type: "WALLET_DISCONNECT" }
+  /** live chain truth — the machine stamps every event with the real epoch */
+  | { type: "CHAIN_SYNC"; chainId: number | null; blockNumber: number | null }
   /** Deployment manifest found for this chain — pools/panels unlock. */
   | { type: "DEPLOYMENT_LOADED"; pool: NonNullable<WorldState["pool"]>; slotPricePerEth: number }
   /** Ground truth from the hook: reserves + written ask. */
@@ -348,6 +350,30 @@ export function reducer(state: WorldState, action: Action): WorldState {
       return {
         ...state,
         wallet: { address: null, eth: null, slot: null },
+      };
+    }
+
+    case "CHAIN_SYNC": {
+      // epoch clock follows the DEPLOYED hook's length — never a constant
+      const len = state.pool?.epochLengthBlocks ?? EPOCH_LENGTH_BLOCKS;
+      const epochId =
+        action.blockNumber != null ? Math.floor(action.blockNumber / len) : null;
+      const blocksUntilEpochEnd =
+        action.blockNumber != null ? len - (action.blockNumber % len) : null;
+      const unchanged =
+        state.chain.chainId === action.chainId &&
+        state.chain.blockNumber === action.blockNumber &&
+        state.chain.epochId === epochId &&
+        state.chain.blocksUntilEpochEnd === blocksUntilEpochEnd;
+      if (unchanged) return state;
+      return {
+        ...state,
+        chain: {
+          chainId: action.chainId,
+          blockNumber: action.blockNumber,
+          epochId,
+          blocksUntilEpochEnd,
+        },
       };
     }
 
