@@ -13,13 +13,17 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
   const s = useCadence();
   const { buySlot } = useCadenceActions();
   const [size, setSize] = useState<number>(2);
+  const [custom, setCustom] = useState<string>("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const ask = s.slotPricePerEth;
-  const cost = ask !== null ? size * ask : null;
+  const budget = s.buyCapacityEth;
+  const effectiveSize = custom !== "" ? Number.parseFloat(custom) || 0 : size;
+  const cost = ask !== null ? effectiveSize * ask : null;
   const insufficient =
     cost !== null && s.wallet.eth !== null && cost > s.wallet.eth;
+  const overBudget = budget !== null && effectiveSize > budget;
   const slot =
     s.wallet.slot && s.chain.epochId !== null && s.wallet.slot.epochId === s.chain.epochId
       ? s.wallet.slot
@@ -28,13 +32,13 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
   const contractsReady = s.pool !== null;
 
   async function handleBuy() {
-    if (pending || !connected || ask === null || !contractsReady || insufficient) return;
+    if (pending || !connected || ask === null || !contractsReady || insufficient || overBudget) return;
     setError(null);
     setPending(true);
     try {
-      await buySlot(size);
+      await buySlot(effectiveSize);
     } catch (e) {
-      setError(e instanceof Error ? e.message.slice(0, 140) : "mint failed");
+      setError(e instanceof Error ? e.message.slice(0, 160) : "mint failed");
     } finally {
       setPending(false);
     }
@@ -47,7 +51,9 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
         ? "Cadence slot contracts are not connected yet — minting activates once the hook is wired."
         : ask === null
           ? "No ask written yet — fetch paid intel to write the slot ask."
-          : null;
+          : overBudget
+            ? "This size exceeds the epoch capacity budget below — pick a smaller capacity."
+            : null;
 
   return (
     <Panel
@@ -112,18 +118,19 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
         <legend className="mb-2 font-mono text-xs uppercase tracking-widest text-muted">
           capacity (trade size you may fill)
         </legend>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {PRESETS.map((p) => (
             <button
               key={p}
               type="button"
-              aria-pressed={size === p}
+              aria-pressed={custom === "" && size === p}
               onClick={() => {
                 setError(null);
+                setCustom("");
                 setSize(p);
               }}
               className={`h-11 rounded-md border font-mono text-sm tabular-nums transition-colors duration-100 ${
-                size === p
+                custom === "" && size === p
                   ? "border-accent bg-accent/10 text-accent-strong"
                   : "border-border text-muted hover:border-border-strong hover:text-foreground"
               }`}
@@ -133,21 +140,60 @@ export function BuyCadencePanel({ className = "" }: { className?: string }) {
           ))}
           <button
             type="button"
-            aria-pressed={size === 10}
+            aria-pressed={custom !== ""}
             onClick={() => {
               setError(null);
-              setSize(10);
+              setCustom("0.1");
             }}
-            className={`h-11 rounded-md border font-mono text-sm tabular-nums transition-colors duration-100 ${
-              size === 10
+            className={`h-11 rounded-md border font-mono text-sm transition-colors duration-100 ${
+              custom !== ""
                 ? "border-accent bg-accent/10 text-accent-strong"
                 : "border-border text-muted hover:border-border-strong hover:text-foreground"
             }`}
           >
-            10 <EthIcon />
+            custom
           </button>
         </div>
+        {custom !== "" ? (
+          <div className="mt-2">
+            <label htmlFor="buy-custom-size" className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-muted">
+              custom capacity (ETH)
+            </label>
+            <div className="relative">
+              <input
+                id="buy-custom-size"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={0.01}
+                autoComplete="off"
+                value={custom}
+                onChange={(e) => {
+                  setError(null);
+                  setCustom(e.target.value);
+                }}
+                className="h-12 w-full rounded-md border border-border-strong bg-surface-raised px-4 pr-12 font-mono text-lg tabular-nums text-foreground transition-colors duration-100 placeholder:text-muted/60 hover:border-muted focus-visible:border-accent"
+                placeholder="0.0"
+              />
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sm text-muted">
+                <EthIcon />
+              </span>
+            </div>
+          </div>
+        ) : null}
       </fieldset>
+
+      {budget !== null ? (
+        <p className="mt-3 flex items-center justify-between font-mono text-[11px] text-muted">
+          <span>
+            epoch budget{" "}
+            <span className="tabular-nums text-foreground">
+              {fmtEth(budget, 3)} <EthIcon />
+            </span>
+          </span>
+          <span>minting above it reverts</span>
+        </p>
+      ) : null}
 
       <div className="mt-5 space-y-1.5 font-mono text-sm">
         <div className="flex items-baseline justify-between">

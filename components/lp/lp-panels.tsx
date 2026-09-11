@@ -61,8 +61,16 @@ export function LpDepositPanel({ className = "" }: { className?: string }) {
     }
     setPending(true);
     try {
-      await depositLpEth(num);
-      setDone(true);
+      const ok = await depositLpEth(num);
+      if (ok) {
+        setDone(true);
+      } else {
+        // no fake success: the tx was rejected in the wallet or reverted at
+        // execution — nothing left the wallet
+        setError(
+          "Deposit did not go through — the wallet rejected it or the transaction reverted. No ETH left your wallet. Check the reject log on /swap and retry.",
+        );
+      }
     } finally {
       setPending(false);
     }

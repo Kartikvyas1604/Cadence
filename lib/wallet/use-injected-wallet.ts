@@ -176,5 +176,6 @@ export function useInjectedWallet() {
     error,
     connect,
     disconnect,
+    refreshBalance,
   };
 }

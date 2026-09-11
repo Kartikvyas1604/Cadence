@@ -39,7 +39,7 @@ const ActionsContext = createContext<{
   ) => Promise<"filled" | RejectReason>;
   attemptBadReveal: (sizeEth: number) => Promise<"filled" | RejectReason>;
   refreshIntel: () => Promise<boolean>;
-  depositLpEth: (sizeEth: number) => Promise<void>;
+  depositLpEth: (sizeEth: number) => Promise<boolean>;
   withdrawLpEth: (sharesEth: number) => Promise<void>;
   applyAsk: (askEth: number) => Promise<void>;
   withdrawProtocolRevenue: () => Promise<void>;
@@ -184,6 +184,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     const d = deploymentRef.current;
     const pc = publicRef.current;
     if (!d || !pc || chain.blockNumber == null) return;
+    const blockNow = chain.blockNumber;
     let alive = true;
     (async () => {
       try {
@@ -208,7 +209,27 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       } catch {
         /* keep last known pool state */
       }
+      try {
+        // live mintable capacity: what the NEXT refresh will grant for this
+        // epoch minus what has already been sold — keeps /buy + /privacy
+        // honest even before a tx triggers the lazy _refreshEpoch
+        const epochNow = Math.floor(blockNow / (d.epochLengthBlocks || 12));
+        const [hookBal, minted, committed] = await Promise.all([
+          pc.getBalance({ address: d.hook }),
+          pc.readContract({ address: d.slots, abi: slotsAbi, functionName: "mintedCapacity", args: [BigInt(epochNow)] }) as Promise<bigint>,
+          pc.readContract({ address: d.slots, abi: slotsAbi, functionName: "committedCapacity", args: [BigInt(epochNow)] }) as Promise<bigint>,
+        ]);
+        if (!alive) return;
+        const activeWei = (hookBal * BigInt(d.lambdaBps)) / 10000n;
+        const used = minted + committed;
+        dispatch({ type: "CAPACITY_SYNC", buyCapacityEth: toEth(activeWei > used ? activeWei - used : 0n) });
+      } catch {
+        /* keep last known capacity */
+      }
       if (wallet.address) {
+        // keep the in-app balance live — the wallet hook only refreshes on
+        // connect/account-change, so writes would otherwise look like no-ops
+        void wallet.refreshBalance(wallet.address);
         try {
           const slot = (await pc.readContract({
             address: d.slots,
@@ -226,7 +247,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [chain.blockNumber, wallet.address, deploymentReady]);
+  }, [chain.blockNumber, wallet.address, wallet.refreshBalance, deploymentReady]);
 
   // ------------------------------------------------------------------
   // LP module: probe availability, then read position + constants.
@@ -391,9 +412,15 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
           sizeEth,
           pricePerEth: Number(formatUnits(BigInt(d.pricePerEth), 18)),
         });
+        void wallet.refreshBalance(account);
+        return;
       }
+      // honesty: the mint reverted — say so where the button is, never silently
+      throw new Error(
+        "mint reverted — the epoch capacity budget cannot cover this size. Check the budget shown on this page and pick a smaller capacity (or deposit on /lp to grow the pool).",
+      );
     },
-    [requireReady, sendTx],
+    [requireReady, sendTx, wallet.refreshBalance],
   );
 
   const commitMint = useCallback(
@@ -435,9 +462,14 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
           pricePerEth: Number(formatUnits(BigInt(d.pricePerEth), 18)),
           salt: String(salt),
         });
+        void wallet.refreshBalance(account);
+        return;
       }
+      throw new Error(
+        "commit reverted — the epoch capacity budget cannot cover the escrow reserve for this size. Pick a smaller size.",
+      );
     },
-    [requireReady, sendTx],
+    [requireReady, sendTx, wallet.refreshBalance],
   );
 
   const attemptSwap = useCallback(
@@ -539,9 +571,9 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const depositLpEth = useCallback(
     async (sizeEth: number) => {
       const ctx = requireReady();
-      if (!ctx || stateRef.current.lp.available !== true) return;
+      if (!ctx || stateRef.current.lp.available !== true) return false;
       const { pc, wc, d } = ctx;
-      await sendTx(
+      const ok = await sendTx(
         () =>
           wc.writeContract({
             address: d.hook,
@@ -555,8 +587,12 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
         pc,
         sizeEth,
       );
+      if (ok === "filled") {
+        void wallet.refreshBalance(ctx.s.wallet.address as `0x${string}`);
+      }
+      return ok === "filled";
     },
-    [requireReady, sendTx],
+    [requireReady, sendTx, wallet.refreshBalance],
   );
 
   const withdrawLpEth = useCallback(

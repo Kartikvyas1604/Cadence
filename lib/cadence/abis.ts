@@ -49,6 +49,8 @@ export const slotsAbi = [
   { type: "function", name: "currentEpoch", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "pricePerEth", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "remainingCapacity", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "mintedCapacity", stateMutability: "view", inputs: [{ name: "", type: "uint256" }], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "committedCapacity", stateMutability: "view", inputs: [{ name: "", type: "uint256" }], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "commitments", stateMutability: "view", inputs: [{ name: "", type: "bytes32" }], outputs: [{ name: "payer", type: "address" }, { name: "epochId", type: "uint256" }, { name: "escrow", type: "uint256" }, { name: "reserved", type: "uint256" }, { name: "status", type: "uint8" }] },
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "", type: "address" }, { name: "", type: "uint256" }], outputs: [{ name: "", type: "uint256" }] },
   { type: "event", name: "SlotMinted", inputs: [{ name: "epochId", type: "uint256", indexed: true }, { name: "buyer", type: "address", indexed: true }, { name: "size", type: "uint256", indexed: false }, { name: "pricePaid", type: "uint256", indexed: false }] },

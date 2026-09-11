@@ -66,6 +66,7 @@ export function initialWorld(): WorldState {
     },
     slotPricePerEth: null,
     askPerEth: null,
+    buyCapacityEth: null,
     intel: null,
     intelCalls: 0,
     graph: [],
@@ -89,6 +90,8 @@ export type Action =
   | { type: "DEPLOYMENT_LOADED"; pool: NonNullable<WorldState["pool"]>; slotPricePerEth: number }
   /** Ground truth from the hook: reserves + written ask. */
   | { type: "POOL_SYNC"; pool: NonNullable<WorldState["pool"]>; slotPricePerEth: number }
+  /** Live mintable capacity for the current epoch (λ × hook balance − sold). */
+  | { type: "CAPACITY_SYNC"; buyCapacityEth: number }
   /** ERC-1155 slot balance of the connected wallet for the CURRENT epoch. */
   | { type: "WALLET_SLOT_SYNC"; capacity: number }
   /** LP module availability probe result. */
@@ -344,6 +347,10 @@ export function reducer(state: WorldState, action: Action): WorldState {
     case "DEPLOYMENT_LOADED":
     case "POOL_SYNC": {
       return { ...state, pool: action.pool, slotPricePerEth: action.slotPricePerEth };
+    }
+
+    case "CAPACITY_SYNC": {
+      return { ...state, buyCapacityEth: action.buyCapacityEth };
     }
 
     case "LP_AVAILABLE": {

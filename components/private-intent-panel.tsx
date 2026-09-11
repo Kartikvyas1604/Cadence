@@ -22,7 +22,9 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
   const s = useCadence();
   const { commitMint, attemptSwap, attemptBadReveal } = useCadenceActions();
   const [size, setSize] = useState<number>(1.5);
+  const [custom, setCustom] = useState<string>("");
   const [pending, setPending] = useState<null | "commit" | "reveal" | "bad">(null);
+  const [error, setError] = useState<string | null>(null);
 
   // deterministic preview only — the commit itself gets a fresh random salt
   // inside the provider, so nothing random is rendered during SSR/hydration
@@ -35,6 +37,10 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
   const cost = s.slotPricePerEth !== null ? size * s.slotPricePerEth : null;
   const insufficient =
     cost !== null && s.wallet.eth !== null && cost > s.wallet.eth;
+  // the escrow (3× price × size) reserves 3× the revealed size against the
+  // epoch budget — guard it so commit cannot revert CapacityExceeded
+  const budget = s.buyCapacityEth;
+  const overBudget = budget !== null && size * 3 > budget;
   const liveCommitment =
     s.wallet.slot &&
     s.chain.epochId !== null &&
@@ -48,8 +54,11 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
   async function handleCommit() {
     if (pending || insufficient || cost === null || !connected || !contractsReady) return;
     setPending("commit");
+    setError(null);
     try {
       await commitMint(size);
+    } catch (e) {
+      setError(e instanceof Error ? e.message.slice(0, 160) : "commit failed");
     } finally {
       setPending(null);
     }
@@ -103,15 +112,19 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
         <legend className="mb-2 font-mono text-xs uppercase tracking-widest text-muted">
           capacity (hidden until reveal)
         </legend>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {PRESETS.map((p) => (
             <button
               key={p}
               type="button"
-              aria-pressed={size === p}
-              onClick={() => setSize(p)}
+              aria-pressed={custom === "" && size === p}
+              onClick={() => {
+                setError(null);
+                setCustom("");
+                setSize(p);
+              }}
               className={`h-11 rounded-md border font-mono text-sm tabular-nums transition-colors duration-100 ${
-                size === p
+                custom === "" && size === p
                   ? "border-info bg-info/10 text-info"
                   : "border-border text-muted hover:border-border-strong hover:text-foreground"
               }`}
@@ -119,13 +132,82 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
               {p} <EthIcon />
             </button>
           ))}
+          <button
+            type="button"
+            aria-pressed={custom !== ""}
+            onClick={() => {
+              setError(null);
+              setCustom("0.05");
+            }}
+            className={`h-11 rounded-md border font-mono text-sm transition-colors duration-100 ${
+              custom !== ""
+                ? "border-info bg-info/10 text-info"
+                : "border-border text-muted hover:border-border-strong hover:text-foreground"
+            }`}
+          >
+            custom
+          </button>
         </div>
+        {custom !== "" ? (
+          <div className="mt-2">
+            <label htmlFor="intent-custom-size" className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-muted">
+              custom capacity (ETH)
+            </label>
+            <div className="relative">
+              <input
+                id="intent-custom-size"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={0.01}
+                autoComplete="off"
+                value={custom}
+                onChange={(e) => {
+                  setError(null);
+                  const n = Number.parseFloat(e.target.value);
+                  setCustom(e.target.value);
+                  if (Number.isFinite(n)) setSize(n);
+                }}
+                className="h-12 w-full rounded-md border border-border-strong bg-surface-raised px-4 pr-12 font-mono text-lg tabular-nums text-foreground transition-colors duration-100 placeholder:text-muted/60 hover:border-muted focus-visible:border-accent"
+                placeholder="0.0"
+              />
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sm text-muted">
+                <EthIcon />
+              </span>
+            </div>
+          </div>
+        ) : null}
+        {budget !== null ? (
+          <p className="mt-2 font-mono text-[11px] text-muted">
+            epoch budget{" "}
+            <span className="tabular-nums text-foreground">
+              {fmtEth(budget, 3)} <EthIcon />
+            </span>{" "}
+            · the escrow reserves 3× the size against it
+          </p>
+        ) : null}
+        {overBudget ? (
+          <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-danger" role="alert">
+            <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            This size&apos;s escrow exceeds the epoch budget — commit will revert. Pick a smaller size.
+          </p>
+        ) : null}
       </fieldset>
+
+      {error ? (
+        <p
+          role="alert"
+          className="mt-4 flex items-start gap-1.5 rounded-md border border-danger/50 bg-danger/5 p-2.5 text-xs leading-5 text-danger"
+        >
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          Commit failed: {error}
+        </p>
+      ) : null}
 
       <button
         type="button"
         onClick={handleCommit}
-        disabled={pending !== null || insufficient || cost === null || !connected || !contractsReady}
+        disabled={pending !== null || insufficient || cost === null || !connected || !contractsReady || overBudget}
         aria-busy={pending === "commit"}
         className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-info font-medium text-background transition-colors duration-100 hover:opacity-90 active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
       >

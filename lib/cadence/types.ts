@@ -193,6 +193,10 @@ export interface WorldState {
   wallet: Wallet;
   /** LP module state — null fields until the LP module is on-chain */
   lp: LpState;
+  /** live mintable capacity for the CURRENT epoch after the next refresh:
+   *  λ × hook ETH balance − minted − committed. Feeds the /buy + /privacy
+   *  size guards — null until contracts are connected. */
+  buyCapacityEth: number | null;
   /** slot ask written by paid intel — null until a real intel call lands */
   slotPricePerEth: number | null;
   askPerEth: number | null;
