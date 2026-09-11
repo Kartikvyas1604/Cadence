@@ -195,10 +195,14 @@ export function SwapPanel({ className = "" }: { className?: string }) {
             </div>
             <p className="mt-2 text-xs leading-5 text-muted">
               {toggledAny
-                ? "This attempt will revert at beforeSwap — exactly what a judge needs to see."
-                : rejectionPreview
-                  ? "Current size would revert on-chain — shrink it, or use a toggle to demo the revert on purpose."
-                  : "Leave all off to attempt a legitimate fill."}
+                ? "This attempt will revert at beforeSwap — exactly what a judge needs to see. Your wallet may warn the transaction will fail: accept and sign, the on-chain revert IS the demo."
+                : rejectionPreview === "no-slot"
+                  ? "No cadence slot held for this epoch — mint one on /buy for a clean fill, or flip a toggle below to demo the revert on purpose."
+                  : rejectionPreview === "oversize"
+                    ? `Size ${fmtEth(sizeNum)} exceeds your slot capacity ${slot ? `(${fmtEth(slot.capacity)})` : ""} — shrink it, or flip a toggle below to demo the revert on purpose.`
+                    : rejectionPreview
+                      ? "Size exceeds the epoch's active depth — shrink it, or flip a toggle below to demo the revert on purpose."
+                      : "Leave all off to attempt a legitimate fill."}
             </p>
           </fieldset>
 

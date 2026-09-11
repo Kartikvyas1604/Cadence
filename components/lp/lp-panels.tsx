@@ -273,9 +273,15 @@ export function LpPositionCard({ className = "" }: { className?: string }) {
 /** This epoch's capacity budget: budget, sold, remaining, expiry. */
 export function LpCapacityPanel({ className = "" }: { className?: string }) {
   const s = useCadence();
-  const budget = s.lp.budgetEth;
+  // the contract's epochCapacityEth only materializes lazily with the first
+  // transaction of each epoch — between transactions show the projected
+  // budget (λ × hook balance − sold) instead of a misleading 0
+  const budget = s.lp.budgetEth != null && s.lp.budgetEth > 0 ? s.lp.budgetEth : s.buyCapacityEth;
   const sold = s.lp.soldCapacityEth;
-  const remaining = s.lp.remainingCapacity;
+  const remaining =
+    s.lp.remainingCapacity != null && s.lp.remainingCapacity > 0
+      ? s.lp.remainingCapacity
+      : s.buyCapacityEth;
 
   return (
     <Panel
@@ -310,7 +316,9 @@ export function LpCapacityPanel({ className = "" }: { className?: string }) {
       </dl>
       <p className="mt-4 border-t border-border pt-3 text-xs leading-5 text-muted">
         At epoch end, unconsumed capacity expires worthless — the LP keeps the
-        sale proceeds and re-partitions at λ.
+        sale proceeds and re-partitions at λ. The budget refreshes with the
+        first transaction of each epoch; the figure shown is the projected
+        budget for this epoch.
       </p>
     </Panel>
   );
