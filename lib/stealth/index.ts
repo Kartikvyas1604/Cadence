@@ -37,9 +37,10 @@ export async function fundEphemeral(
   funder: WalletClient,
   session: StealthSession,
   amountEth: string,
+  from: `0x${string}`,
 ): Promise<`0x${string}`> {
   return funder.sendTransaction({
-    account: null,
+    account: from,
     chain: null,
     to: session.account.address as `0x${string}`,
     value: parseEther(amountEth),

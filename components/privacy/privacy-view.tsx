@@ -123,8 +123,14 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
       setError("Connect to a chain with a deployment first.");
       return;
     }
+    if (!s.wallet.address) {
+      setError("Wallet not connected — connect before funding the ephemeral wallet.");
+      return;
+    }
     try {
-      await fundEphemeral(funder, session, amount);
+      // explicit `from` — several injected wallets reject a from-less
+      // eth_sendTransaction with RPC -32602
+      await fundEphemeral(funder, session, amount, s.wallet.address as `0x${string}`);
       setNote(`Funded with ${amount} ETH.`);
       void refreshBalance();
     } catch (e) {
