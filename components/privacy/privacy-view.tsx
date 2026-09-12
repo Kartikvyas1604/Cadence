@@ -187,17 +187,23 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
           ? (sizeWei * priceWei * 3n) / parseUnits("1", 18)
           : minEscrowWei;
       // the escrow RESERVES escrow/ask capacity for the epoch — if that
-      // exceeds what's left, the contract reverts CapacityExceeded; refuse
-      // early with the real numbers instead of a cryptic revert
+      // exceeds what's left, the contract reverts CapacityExceeded. BUT
+      // remainingCapacity() reads 0 before the epoch's first transaction
+      // (the budget is set by refreshEpoch, which commitMint itself calls).
+      // So estimate the POST-REFRESH capacity the same way _repartition
+      // computes it: active = hook ETH × lambdaBps, minus what's sold.
       const reserve = (escrow * parseUnits("1", 18)) / priceWei;
-      const remaining = (await pc.readContract({
-        address: deployment.slots,
-        abi: slotsAbi,
-        functionName: "remainingCapacity",
-      })) as bigint;
-      if (reserve > remaining) {
+      const [hookBal, minted, committed] = await Promise.all([
+        pc.getBalance({ address: deployment.hook }),
+        pc.readContract({ address: deployment.slots, abi: slotsAbi, functionName: "mintedCapacity", args: [BigInt(epochId)] }) as Promise<bigint>,
+        pc.readContract({ address: deployment.slots, abi: slotsAbi, functionName: "committedCapacity", args: [BigInt(epochId)] }) as Promise<bigint>,
+      ]);
+      const expectedActive = (hookBal * BigInt(deployment.lambdaBps)) / 10_000n;
+      const used = minted + committed;
+      const remainingEstimate = expectedActive > used ? expectedActive - used : 0n;
+      if (reserve > remainingEstimate) {
         setError(
-          `This epoch has only ${formatUnits(remaining, 2)} ETH of capacity left, but a commit must reserve ${formatUnits(reserve, 2)} (the min-escrow bound is ${formatUnits(minEscrowWei, 4)} ETH ÷ ask). Wait for the next epoch (it rolls every ~50 min on Sepolia) or deposit on /lp to grow the pool.`,
+          `This epoch's pool can cover ${formatUnits(remainingEstimate, 3)} ETH of new capacity, but this commit must reserve ${formatUnits(reserve, 3)} (min escrow ${formatUnits(minEscrowWei, 4)} ETH ÷ ask ${formatUnits(priceWei, 4)}). Wait for the next epoch (rolls every ~50 min on Sepolia) or deposit on /lp to grow the pool.`,
         );
         return;
       }
