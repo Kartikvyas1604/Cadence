@@ -87,8 +87,13 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
     }
   }, [session, s.chain.chainId]);
 
+  // poll the ephemeral balance every 4s — a fund tx mined after the initial
+  // read would otherwise never surface, leaving the commit button dead
   useEffect(() => {
+    if (!session) return;
     queueMicrotask(() => void refreshBalance());
+    const t = setInterval(() => void refreshBalance(), 4_000);
+    return () => clearInterval(t);
   }, [refreshBalance]);
 
   // default the sweep destination to the connected wallet once known
