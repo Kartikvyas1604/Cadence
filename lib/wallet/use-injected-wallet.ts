@@ -63,7 +63,17 @@ function startDiscovery() {
       }
     }
   });
-  window.dispatchEvent(new Event("eip6963:requestProvider"));
+  // Ask for announcements ONCE is not enough: wallet content scripts can be
+  // injected after this dispatch (slow tabs, dev mode) and then MISS it —
+  // the registry stays empty and every refresh falls back to the picker.
+  // Re-request a few times until the wallets actually answer.
+  const reRequest = () => window.dispatchEvent(new Event("eip6963:requestProvider"));
+  reRequest();
+  for (const delay of [300, 700, 1500, 3000]) {
+    setTimeout(() => {
+      if (announced.size === 0) reRequest();
+    }, delay);
+  }
 }
 
 function providerForRdns(rdns: string | null): Eip1193Provider | null {
@@ -182,15 +192,25 @@ export function useInjectedWallet() {
         if (remembered) candidates.push(remembered);
         const injected = getInjected();
         if (injected && injected !== remembered) candidates.push(injected);
-        for (const provider of candidates) {
+        for (const candidate of candidates) {
           try {
-            const accounts = (await provider.request({
+            const accounts = (await candidate.request({
               method: "eth_accounts",
             })) as string[];
             const restored = (accounts ?? [])[0] ?? null;
             if (restored) {
+              // connected through the default provider? remember WHICH
+              // wallet that is (matched against 6963 announcements) so the
+              // next refresh goes straight to it
+              if (candidate !== remembered) {
+                const legacyMatch = Array.from(announced.values()).find(
+                  (d) => d.provider === candidate,
+                );
+                storeRdns(legacyMatch?.info.rdns ?? null);
+                queueMicrotask(() => setConnectedRdns(legacyMatch?.info.rdns ?? null));
+              }
               setAddress(restored);
-              queueMicrotask(() => setConnectedRdns(storedRdns()));
+              queueMicrotask(() => setConnectedRdns((prev) => prev ?? storedRdns()));
               void refreshChain();
               void refreshBalance(restored);
               return;
@@ -263,7 +283,18 @@ export function useInjectedWallet() {
   /** Connect to a SPECIFIC detected wallet (first-visit picker choice). */
   const connectTo = useCallback(
     async (rdns: string | null) => {
-      const provider = rdns ? (announced.get(rdns)?.provider ?? getInjected()) : getInjected();
+      // if a remembered wallet hasn't announced yet, give the extensions a
+      // short window to answer the 6963 request before falling back —
+      // falling back to the default provider is what opens the multi-wallet
+      // picker the user finds annoying
+      let provider = rdns ? announced.get(rdns)?.provider : getInjected();
+      if (rdns && !provider) {
+        for (let i = 0; i < 6 && !announced.has(rdns); i += 1) {
+          window.dispatchEvent(new Event("eip6963:requestProvider"));
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        provider = announced.get(rdns)?.provider ?? getInjected();
+      }
       if (!provider) {
         setError("No injected wallet found — install MetaMask or Rabby");
         return;
