@@ -163,7 +163,11 @@ const DEMO_GAS: TransactionGasDetails = {
 export async function shieldRailgun(
   amountWei: string,
   opts: { broadcast?: BroadcastFn } = {},
-): Promise<{ txHash: string | null; railgunAddress: string | null }> {
+): Promise<{
+  txHash: string | null;
+  railgunAddress: string | null;
+  populatedTx: BroadcastTx | null;
+}> {
   const network = await ensureEngine();
   const encryptionKey = process.env.RAILGUN_ENCRYPTION_KEY as string;
   const walletID = process.env.RAILGUN_WALLET_ID as string;
@@ -190,7 +194,14 @@ export async function shieldRailgun(
     shieldPrivateKey,
     baseTokenAmount(amountWei),
   );
-  return { txHash: await populatedToTx(populated, opts.broadcast), railgunAddress };
+  const tx = populated.transaction;
+  return {
+    txHash: await populatedToTx(populated, opts.broadcast),
+    railgunAddress,
+    populatedTx: tx
+      ? { to: tx.to as string, data: tx.data as string, value: (tx.value ?? 0n).toString() }
+      : null,
+  };
 }
 
 /** Unshield base-token (ETH) from the Railgun wallet to a public payer. */
@@ -198,7 +209,7 @@ export async function unshieldRailgun(
   to: string,
   amountWei: string,
   opts: { broadcast?: BroadcastFn; onProofProgress?: (progress: number) => void } = {},
-): Promise<{ txHash: string | null }> {
+): Promise<{ txHash: string | null; populatedTx: BroadcastTx | null }> {
   const network = await ensureEngine();
   const encryptionKey = process.env.RAILGUN_ENCRYPTION_KEY as string;
   const walletID = process.env.RAILGUN_WALLET_ID as string;
@@ -228,7 +239,13 @@ export async function unshieldRailgun(
     null,
     DEMO_GAS,
   );
-  return { txHash: await populatedToTx(populated, opts.broadcast) };
+  const tx = populated.transaction;
+  return {
+    txHash: await populatedToTx(populated, opts.broadcast),
+    populatedTx: tx
+      ? { to: tx.to as string, data: tx.data as string, value: (tx.value ?? 0n).toString() }
+      : null,
+  };
 }
 
 /** Wallet-store hygiene for long-lived processes. */

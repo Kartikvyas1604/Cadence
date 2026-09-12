@@ -77,22 +77,27 @@ export function isConfigured(protocol: ShieldProtocol): boolean {
   return missingEnvFor(protocol).length === 0;
 }
 
+/** Result of a shield/unshield that the caller's wallet still has to broadcast. */
+export interface ShieldResult {
+  /** settled tx hash — only when a broadcast fn was provided */
+  txHash: string | null;
+  /** populated transaction for the caller's wallet to broadcast (to/data/value) */
+  populatedTx: { to: string; data: string; value: string } | null;
+}
+
 /**
  * Shield into the private balance. Railgun: real SDK flow via
  * populateShieldBaseToken. Unset env ⇒ NotWired (funds are not moved).
+ * Without a broadcast fn the populated tx is returned for the caller's
+ * wallet to sign — nothing is faked.
  */
-export async function shield(protocol: ShieldProtocol, params: ShieldParams): Promise<string> {
+export async function shield(protocol: ShieldProtocol, params: ShieldParams): Promise<ShieldResult> {
   if (protocol === "railgun") {
     const missing = missingEnvFor(protocol);
     if (missing.length > 0) throw new NotWired(protocol, missing);
     const { shieldRailgun } = await import("./railgun");
-    const { txHash } = await shieldRailgun(params.amountWei, { broadcast: params.broadcast });
-    if (!txHash) {
-      throw new Error(
-        "railgun_shield_pending: the populated shield tx was returned — broadcast it with your wallet to settle",
-      );
-    }
-    return txHash;
+    const r = await shieldRailgun(params.amountWei, { broadcast: params.broadcast });
+    return { txHash: r.txHash, populatedTx: r.populatedTx };
   }
   throw new NotWired(protocol, missingEnvFor(protocol));
 }
@@ -100,21 +105,16 @@ export async function shield(protocol: ShieldProtocol, params: ShieldParams): Pr
 /**
  * Unshield to the ephemeral payer that will commit/mint the cadence slot.
  */
-export async function unshieldTo(protocol: ShieldProtocol, params: UnshieldParams): Promise<string> {
+export async function unshieldTo(protocol: ShieldProtocol, params: UnshieldParams): Promise<ShieldResult> {
   if (protocol === "railgun") {
     const missing = missingEnvFor(protocol);
     if (missing.length > 0) throw new NotWired(protocol, missing);
     const { unshieldRailgun } = await import("./railgun");
-    const { txHash } = await unshieldRailgun(params.to, params.amountWei, {
+    const r = await unshieldRailgun(params.to, params.amountWei, {
       broadcast: params.broadcast,
       onProofProgress: params.onProofProgress,
     });
-    if (!txHash) {
-      throw new Error(
-        "railgun_unshield_pending: the proved unshield tx was returned — broadcast it with your wallet to settle",
-      );
-    }
-    return txHash;
+    return { txHash: r.txHash, populatedTx: r.populatedTx };
   }
   throw new NotWired(protocol, missingEnvFor(protocol));
 }
@@ -129,7 +129,17 @@ export async function shieldToCadencePayer(
   shieldParams: ShieldParams,
   unshieldParams: UnshieldParams,
 ): Promise<ShieldBridgeTx> {
-  const inTx = await shield(protocol, shieldParams);
-  const outTx = await unshieldTo(protocol, unshieldParams);
-  return { protocol, inTx, outTx, amount: shieldParams.amountWei };
+  const shielded = await shield(protocol, shieldParams);
+  if (!shielded.txHash) {
+    throw new Error(
+      "shield leg pending: the populated shield tx must be broadcast with your wallet before the unshield leg can run",
+    );
+  }
+  const unshielded = await unshieldTo(protocol, unshieldParams);
+  if (!unshielded.txHash) {
+    throw new Error(
+      "unshield leg pending: the proved unshield tx must be broadcast with your wallet to settle",
+    );
+  }
+  return { protocol, inTx: shielded.txHash, outTx: unshielded.txHash, amount: shieldParams.amountWei };
 }

@@ -1,13 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { PrivateIntentPanel } from "@/components/private-intent-panel";
 import { useCadence } from "@/lib/cadence/provider";
 import { publicClientFor } from "@/lib/cadence/contract";
-import { createEphemeral, fundEphemeral, walletFromProvider, type StealthSession } from "@/lib/stealth";
+import { loadDeployment, slotsAbi } from "@/lib/cadence/abis";
+import {
+  commitFromEphemeral,
+  createEphemeral,
+  fundEphemeral,
+  revealFromEphemeral,
+  sweep,
+  walletFromProvider,
+  type StealthSession,
+} from "@/lib/stealth";
 import { fmtEth } from "@/lib/cadence/format";
-import { formatUnits } from "viem";
+import { shortHash } from "@/lib/cadence/hash";
+import { formatUnits, parseUnits } from "viem";
+import {
+  fetchShieldStatus,
+  shieldFunds,
+  unshieldFunds,
+  type ShieldStatus,
+} from "@/lib/shield/client";
 
 /**
  * Privacy page (Extended §§3/5/7): Private Cadence Intent (beat #2),
@@ -41,13 +58,21 @@ export function PrivacyView() {
   );
 }
 
-/** Extended §5 — stealth / ephemeral payer: one-shot key, fund, commit, sweep. */
+/** Extended §5 — stealth / ephemeral payer: one-shot key, fund, commit, reveal, sweep. */
 function StealthWalletPanel({ className = "" }: { className?: string }) {
   const s = useCadence();
   const [session, setSession] = useState<StealthSession | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
+  const [busy, setBusy] = useState<null | "commit" | "reveal" | "sweep">(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [commitment, setCommitment] = useState<{
+    H: `0x${string}`;
+    salt: `0x${string}`;
+    sizeEth: number;
+  } | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [sweepTo, setSweepTo] = useState<string>("");
 
   const refreshBalance = useCallback(async () => {
     if (!session || s.chain.chainId == null) return;
@@ -65,6 +90,24 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
   useEffect(() => {
     queueMicrotask(() => void refreshBalance());
   }, [refreshBalance]);
+
+  // default the sweep destination to the connected wallet once known
+  useEffect(() => {
+    if (s.wallet.address) {
+      queueMicrotask(() => setSweepTo((prev) => (prev ? prev : s.wallet.address!)));
+    }
+  }, [s.wallet.address]);
+
+  // final guard: a tab closing with funded ETH on a memory-only key is loss
+  const hasFunds = balance != null && Number(balance) > 0.000001;
+  useEffect(() => {
+    if (!session || !hasFunds) return;
+    const guard = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [session, hasFunds]);
 
   async function fund(amount: string) {
     if (!session) return;
@@ -89,6 +132,120 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
     }
   }
 
+  async function commitFromSession(sizeEth: number) {
+    if (!session || busy) return;
+    setError(null);
+    setNote(null);
+    if (s.chain.chainId == null) {
+      setError("Connect to a chain with a deployment first.");
+      return;
+    }
+    setBusy("commit");
+    try {
+      const deployment = await loadDeployment(s.chain.chainId);
+      if (!deployment) {
+        setError("No Cadence deployment found for this chain — switch networks.");
+        return;
+      }
+      const pc = publicClientFor(s.chain.chainId);
+      const epochId = Number(
+        await pc.readContract({
+          address: deployment.slots,
+          abi: slotsAbi,
+          functionName: "currentEpoch",
+        }),
+      );
+      const priceWei = await pc.readContract({
+        address: deployment.slots,
+        abi: slotsAbi,
+        functionName: "pricePerEth",
+      }) as bigint;
+      const sizeWei = parseUnits(String(sizeEth), 18);
+      // same 3× reserve the provider path uses — bounds the escrow leak
+      const escrow = (sizeWei * priceWei * 3n) / parseUnits("1", 18);
+      const salt = `0x${Array.from(
+        crypto.getRandomValues(new Uint8Array(32)),
+        (b) => b.toString(16).padStart(2, "0"),
+      ).join("")}` as `0x${string}`;
+      const { H, txHash } = await commitFromEphemeral(
+        session,
+        { deployment, pc, chainId: s.chain.chainId },
+        { sizeWei, epochId, salt, escrowWei: escrow },
+      );
+      setCommitment({ H, salt, sizeEth });
+      setNote(
+        `Committed — the payer of record onchain is the one-shot address. tx ${txHash.slice(0, 10)}…`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message.slice(0, 220) : "ephemeral commit failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function revealFromSession() {
+    if (!session || busy || !commitment) return;
+    setError(null);
+    setNote(null);
+    if (s.chain.chainId == null) {
+      setError("Connect to a chain with a deployment first.");
+      return;
+    }
+    setBusy("reveal");
+    try {
+      const deployment = await loadDeployment(s.chain.chainId);
+      if (!deployment) {
+        setError("No Cadence deployment found for this chain — switch networks.");
+        return;
+      }
+      const pc = publicClientFor(s.chain.chainId);
+      const txHash = await revealFromEphemeral(
+        session,
+        { deployment, pc, chainId: s.chain.chainId },
+        { sizeEth: commitment.sizeEth, salt: commitment.salt },
+      );
+      setCommitment(null);
+      setNote(
+        `Revealed & swapped — USDC and the escrow refund landed on the ephemeral wallet. Sweep them back. tx ${txHash.slice(0, 10)}…`,
+      );
+      void refreshBalance();
+    } catch (e) {
+      setError(e instanceof Error ? e.message.slice(0, 220) : "ephemeral reveal failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sweepBack() {
+    if (!session || busy) return;
+    setError(null);
+    setNote(null);
+    if (s.chain.chainId == null) {
+      setError("Connect to a chain with a deployment first.");
+      return;
+    }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(sweepTo)) {
+      setError("Enter a valid sweep destination address.");
+      return;
+    }
+    setBusy("sweep");
+    try {
+      const result = await sweep(session, sweepTo as `0x${string}`, s.chain.chainId);
+      if (result) {
+        setNote(
+          `Swept ${formatUnits(result.sweptWei, 18)} ETH back to the main wallet. tx ${result.txHash.slice(0, 10)}…`,
+        );
+      } else {
+        setNote("Nothing worth sweeping — balance is at or below the gas reserve.");
+      }
+      void refreshBalance();
+    } catch (e) {
+      setError(e instanceof Error ? e.message.slice(0, 220) : "sweep failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <Panel
       id="privacy-stealth"
@@ -98,6 +255,13 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
       className={className}
     >
       <div className="flex flex-1 flex-col gap-4">
+        {session ? (
+          <LpNotice kind="warn">
+            The key lives in this tab only. Refresh, navigate away, or discard —
+            and any ETH left on it is unrecoverable. Sweep before you leave.
+          </LpNotice>
+        ) : null}
+
         {session ? (
           <>
             <div>
@@ -111,47 +275,139 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
                 balance {balance ?? "—"} ETH
               </p>
             </div>
+
             <div className="flex flex-wrap gap-2">
-              {["0.01", "0.05"].map((v) => (
+              {["0.05", "0.1"].map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => void fund(v)}
-                  className="h-11 rounded-md border border-border-strong px-4 font-mono text-xs tabular-nums text-foreground transition-colors duration-100 hover:border-accent hover:text-accent-strong"
+                  disabled={busy !== null}
+                  className="h-11 rounded-md border border-border-strong px-4 font-mono text-xs tabular-nums text-foreground transition-colors duration-100 hover:border-accent hover:text-accent-strong disabled:pointer-events-none disabled:opacity-50"
                 >
                   fund {v} ETH
                 </button>
               ))}
               <button
                 type="button"
-                onClick={() => {
-                  setSession(null);
-                  setBalance(null);
-                  setNote(null);
-                  setError(null);
-                }}
-                className="h-11 rounded-md border border-border px-4 text-sm text-muted transition-colors duration-100 hover:bg-surface-raised hover:text-danger"
+                disabled={busy !== null || !hasFunds || s.chain.chainId == null}
+                onClick={() => void commitFromSession(0.01)}
+                aria-busy={busy === "commit"}
+                className="h-11 rounded-md bg-info px-4 font-mono text-xs tabular-nums text-background transition-opacity duration-100 hover:opacity-90 active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
+              >
+                {busy === "commit" ? "Committing…" : "commit 0.01 from ephemeral"}
+              </button>
+            </div>
+
+            {commitment ? (
+              <div className="rounded-md border border-info/40 bg-info/5 p-3">
+                <p className="font-mono text-[11px] uppercase tracking-widest text-info">
+                  ephemeral intent live
+                </p>
+                <p className="mt-1 truncate font-mono text-xs tabular-nums text-foreground">
+                  H {shortHash(commitment.H)} · size hidden until reveal
+                </p>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void revealFromSession()}
+                  aria-busy={busy === "reveal"}
+                  className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {busy === "reveal" ? "Revealing…" : "Reveal & swap from ephemeral"}
+                </button>
+                <p className="mt-2 text-xs leading-5 text-muted">
+                  The same one-shot key must reveal — the hook checks payer ==
+                  trader. USDC lands on the ephemeral wallet, then you sweep.
+                </p>
+              </div>
+            ) : null}
+
+            <div>
+              <label
+                htmlFor="sweep-to"
+                className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-muted"
+              >
+                sweep destination (your main wallet)
+              </label>
+              <input
+                id="sweep-to"
+                type="text"
+                value={sweepTo}
+                onChange={(e) => setSweepTo(e.target.value)}
+                spellCheck={false}
+                autoComplete="off"
+                className="h-10 w-full rounded-md border border-border-strong bg-surface-raised px-3 font-mono text-xs tabular-nums text-foreground transition-colors duration-100 focus-visible:border-accent"
+                placeholder="0x…"
+              />
+              <button
+                type="button"
+                disabled={busy !== null || !hasFunds || !/^0x[0-9a-fA-F]{40}$/.test(sweepTo)}
+                onClick={() => void sweepBack()}
+                aria-busy={busy === "sweep"}
+                className="mt-2 inline-flex h-11 w-full items-center justify-center rounded-md border border-border-strong px-4 font-mono text-xs tabular-nums text-foreground transition-colors duration-100 hover:border-accent hover:text-accent-strong disabled:pointer-events-none disabled:opacity-50"
+              >
+                {busy === "sweep" ? "Sweeping…" : "sweep leftovers"}
+              </button>
+            </div>
+
+            {note ? <LpNotice kind="success">{note}</LpNotice> : null}
+            {error ? <LpNotice kind="error">{error}</LpNotice> : null}
+
+            {confirmDiscard ? (
+              <div className="rounded-md border border-danger/50 bg-danger/5 p-3">
+                <p className="flex items-start gap-1.5 text-xs leading-5 text-danger" role="alert">
+                  <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  {hasFunds
+                    ? `This wallet still holds ${balance} ETH. Discarding destroys the key — the funds become unrecoverable.`
+                    : "Discarding destroys the key permanently."}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSession(null);
+                      setBalance(null);
+                      setNote(null);
+                      setError(null);
+                      setCommitment(null);
+                      setConfirmDiscard(false);
+                    }}
+                    className="h-9 flex-1 rounded-md bg-danger px-3 text-xs font-medium text-background transition-opacity duration-100 hover:opacity-90"
+                  >
+                    destroy key
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDiscard(false)}
+                    className="h-9 flex-1 rounded-md border border-border px-3 text-xs text-muted transition-colors duration-100 hover:bg-surface-raised hover:text-foreground"
+                  >
+                    keep it
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDiscard(true)}
+                disabled={busy !== null}
+                className="h-11 rounded-md border border-border px-4 text-sm text-muted transition-colors duration-100 hover:bg-surface-raised hover:text-danger disabled:pointer-events-none disabled:opacity-50"
               >
                 discard
               </button>
-            </div>
-            {note ? (
-              <LpNotice kind="success">{note}</LpNotice>
-            ) : null}
-            {error ? (
-              <LpNotice kind="error">{error}</LpNotice>
-            ) : null}
+            )}
+
             <p className="text-xs leading-5 text-muted">
-              The key lives in this tab only — never persisted, no KYC. Fund it,
-              then commit-mint from the ephemeral account and sweep the rest.
+              Nothing touches your main wallet: the ephemeral key commits the
+              mint, reveals the swap, and sweeps what&apos;s left back.
             </p>
           </>
         ) : (
           <>
             <p className="text-sm leading-6 text-muted">
               Generate a one-shot wallet locally. Nothing touches your main
-              wallet — the ephemeral key funds the commit-mint and the x402
-              payment, then sweeps what&apos;s left.
+              wallet — the ephemeral key commits, reveals, and pays, then
+              sweeps what&apos;s left.
             </p>
             <button
               type="button"
@@ -169,14 +425,75 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
 
 /** Extended §7 — Aztec/Railgun fund path: shield → fund → commit. */
 function ShieldFundPanel({ className = "" }: { className?: string }) {
+  const s = useCadence();
   const [protocol, setProtocol] = useState<"railgun" | "aztec">("railgun");
-  const [step] = useState(0); // adapter wiring lands with the lib adapters
+  const [status, setStatus] = useState<ShieldStatus | null>(null);
+  const [amount, setAmount] = useState<string>("0.05");
+  const [busy, setBusy] = useState<null | "shield" | "unshield">(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [step, setStep] = useState(0); // advances only on real, settled txs
 
   const STEPS = [
     ["1 · shield", "Shield funds into your Railgun/Aztec private balance."],
     ["2 · fund", "Unshield to the ephemeral wallet that pays for the slot."],
     ["3 · commit", "commitMint(H) from the ephemeral wallet — size hidden."],
   ] as const;
+
+  useEffect(() => {
+    let alive = true;
+    fetchShieldStatus()
+      .then((st) => {
+        if (alive) setStatus(st);
+      })
+      .catch(() => {
+        /* status route unreachable — panel stays in the honest unset state */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const adapterStatus = status?.[protocol];
+  const configured = adapterStatus?.configured ?? false;
+
+  async function run(op: "shield" | "unshield") {
+    if (busy) return;
+    setError(null);
+    setNote(null);
+    if (op === "unshield" && !s.wallet.address) {
+      setError("Connect your wallet first — unshield needs a payer address.");
+      return;
+    }
+    setBusy(op);
+    try {
+      if (op === "shield") {
+        const r = await shieldFunds({ protocol, amountEth: amount });
+        if (r.tx) {
+          setStep((prev) => Math.max(prev, 1));
+          setNote(`Shielded ${amount} ETH — tx ${r.tx.slice(0, 10)}…`);
+        } else {
+          setNote(r.note || "Shield populated but nothing settled — nothing was faked.");
+        }
+      } else {
+        const r = await unshieldFunds({
+          protocol,
+          amountEth: amount,
+          to: s.wallet.address as string,
+        });
+        if (r.tx) {
+          setStep((prev) => Math.max(prev, 2));
+          setNote(`Unshielded ${amount} ETH to the payer wallet — tx ${r.tx.slice(0, 10)}…`);
+        } else {
+          setNote(r.note || "Unshield populated but nothing settled — nothing was faked.");
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message.slice(0, 240) : `${op} failed`);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <Panel
@@ -192,21 +509,32 @@ function ShieldFundPanel({ className = "" }: { className?: string }) {
             adapter
           </legend>
           <div className="grid grid-cols-2 gap-2">
-            {(["railgun", "aztec"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                aria-pressed={protocol === v}
-                onClick={() => setProtocol(v)}
-                className={`h-10 rounded-md border font-mono text-xs uppercase tracking-widest transition-colors duration-100 ${
-                  protocol === v
-                    ? "border-accent/60 bg-accent/10 text-accent-strong"
-                    : "border-border text-muted hover:border-border-strong"
-                }`}
-              >
-                {v}
-              </button>
-            ))}
+            {(["railgun", "aztec"] as const).map((v) => {
+              const st = status?.[v];
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={protocol === v}
+                  onClick={() => setProtocol(v)}
+                  className={`h-10 rounded-md border font-mono text-xs uppercase tracking-widest transition-colors duration-100 ${
+                    protocol === v
+                      ? "border-accent/60 bg-accent/10 text-accent-strong"
+                      : "border-border text-muted hover:border-border-strong"
+                  }`}
+                >
+                  {v}
+                  {st ? (
+                    <span
+                      className={`ml-2 inline-block size-1.5 rounded-full ${
+                        st.configured ? "bg-success" : "bg-muted/50"
+                      }`}
+                      title={st.configured ? "configured" : "not configured on this deployment"}
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </fieldset>
 
@@ -222,13 +550,58 @@ function ShieldFundPanel({ className = "" }: { className?: string }) {
           ))}
         </ol>
 
-        <LpNotice kind="warn">
-          Railgun is wired behind env gating — the real SDK flow runs when
-          RAILGUN_* env is set on this deployment, and every call with env
-          unset fails closed naming the missing vars. Aztec lands when
-          AZTEC_NODE_URL + AZTEC_ACCOUNT_SECRET are configured. The
-          commit-reveal path above works today.
-        </LpNotice>
+        {configured ? (
+          <>
+            <div>
+              <label
+                htmlFor="shield-amount"
+                className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-muted"
+              >
+                amount (ETH)
+              </label>
+              <input
+                id="shield-amount"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={0.01}
+                autoComplete="off"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="h-10 w-full rounded-md border border-border-strong bg-surface-raised px-3 font-mono text-sm tabular-nums text-foreground transition-colors duration-100 focus-visible:border-accent"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy !== null || !amount}
+                onClick={() => void run("shield")}
+                aria-busy={busy === "shield"}
+                className="h-11 flex-1 rounded-md bg-info px-4 text-sm font-medium text-background transition-opacity duration-100 hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {busy === "shield" ? "Shielding…" : "shield into private balance"}
+              </button>
+              <button
+                type="button"
+                disabled={busy !== null || !amount || !s.wallet.address}
+                onClick={() => void run("unshield")}
+                aria-busy={busy === "unshield"}
+                className="h-11 flex-1 rounded-md border border-border-strong px-4 text-sm font-medium text-foreground transition-colors duration-100 hover:border-accent hover:text-accent-strong disabled:pointer-events-none disabled:opacity-50"
+              >
+                {busy === "unshield" ? "Unshielding…" : "unshield to payer"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <LpNotice kind="warn">
+            {adapterStatus
+              ? `${protocol} is not configured on this deployment (${adapterStatus.missing} env var(s) missing). Calls fail closed — funds are NOT moved. The commit-reveal paths on this page work today.`
+              : "Checking adapter configuration…"}
+          </LpNotice>
+        )}
+
+        {note ? <LpNotice kind="success">{note}</LpNotice> : null}
+        {error ? <LpNotice kind="error">{error}</LpNotice> : null}
 
         <p className="text-xs leading-5 text-muted">
           Shields funds, not the swap. The beforeSwap gate and reject paths stay
