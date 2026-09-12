@@ -186,6 +186,21 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
         (sizeWei * priceWei * 3n) / parseUnits("1", 18) >= minEscrowWei
           ? (sizeWei * priceWei * 3n) / parseUnits("1", 18)
           : minEscrowWei;
+      // the escrow RESERVES escrow/ask capacity for the epoch — if that
+      // exceeds what's left, the contract reverts CapacityExceeded; refuse
+      // early with the real numbers instead of a cryptic revert
+      const reserve = (escrow * parseUnits("1", 18)) / priceWei;
+      const remaining = (await pc.readContract({
+        address: deployment.slots,
+        abi: slotsAbi,
+        functionName: "remainingCapacity",
+      })) as bigint;
+      if (reserve > remaining) {
+        setError(
+          `This epoch has only ${formatUnits(remaining, 2)} ETH of capacity left, but a commit must reserve ${formatUnits(reserve, 2)} (the min-escrow bound is ${formatUnits(minEscrowWei, 4)} ETH ÷ ask). Wait for the next epoch (it rolls every ~50 min on Sepolia) or deposit on /lp to grow the pool.`,
+        );
+        return;
+      }
       // the ephemeral wallet pays escrow + gas NOW, and the swap principal
       // (size ETH) at reveal — refuse early instead of reverting later
       const needed = escrow + sizeWei;

@@ -163,38 +163,58 @@ export function useInjectedWallet() {
   useEffect(() => {
     startDiscovery();
     queueMicrotask(() => setConnectedRdns(storedRdns()));
-    const provider = providerForRdns(storedRdns());
-    if (!provider?.on) return;
+
+    let attempts = 0;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     // silent reconnect to the SAME wallet the user picked before —
-    // eth_accounts never prompts; a pick popup only shows on first visit
-    let attempts = 0;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    // eth_accounts never prompts; a pick popup only shows on first visit.
+    // Probes BOTH the remembered 6963 wallet and the default injected
+    // provider, because some wallets (or MetaMask's multi-wallet picker)
+    // authorize the default provider even when another was chosen.
     const trySilent = () => {
+      if (stopped) return;
       (async () => {
-        try {
-          const accounts = (await providerForRdns(storedRdns())?.request({
-            method: "eth_accounts",
-          })) as string[];
-          const restored = (accounts ?? [])[0] ?? null;
-          if (restored) {
-            setAddress(restored);
-            setConnectedRdns(storedRdns());
-            void refreshChain();
-            void refreshBalance(restored);
-            return;
+        const candidates: Eip1193Provider[] = [];
+        const rdns = storedRdns();
+        const remembered = rdns ? announced.get(rdns)?.provider : null;
+        if (remembered) candidates.push(remembered);
+        const injected = getInjected();
+        if (injected && injected !== remembered) candidates.push(injected);
+        for (const provider of candidates) {
+          try {
+            const accounts = (await provider.request({
+              method: "eth_accounts",
+            })) as string[];
+            const restored = (accounts ?? [])[0] ?? null;
+            if (restored) {
+              setAddress(restored);
+              queueMicrotask(() => setConnectedRdns(storedRdns()));
+              void refreshChain();
+              void refreshBalance(restored);
+              return;
+            }
+          } catch {
+            /* wallet locked or not ready yet — try the next candidate */
           }
-        } catch {
-          /* wallet locked or not ready yet */
         }
-        // wallet extensions report eth_accounts empty while locked — retry
-        // briefly so unlocking the wallet restores the session without a click
+        // wallets report eth_accounts empty while locked, and 6963
+        // announcements can land late — retry for ~30s, then idle
         attempts += 1;
-        if (attempts < 4) timer = setTimeout(trySilent, 1_500);
+        if (attempts < 20) timer = setTimeout(trySilent, 1_500);
       })();
     };
     trySilent();
 
+    // a wallet extension announcing after mount can satisfy the stored
+    // rdns — re-probe the moment any new provider announces itself
+    const onAnnounced = () => {
+      if (!stopped) trySilent();
+    };
+    presenceListeners.add(onAnnounced);
+
+    const active = () => providerForRdns(storedRdns());
     const onAccounts = (...args: never[]) => {
       const accounts = (args[0] ?? []) as string[];
       const next = accounts[0] ?? null;
@@ -204,18 +224,33 @@ export function useInjectedWallet() {
     };
     const onChain = (...args: never[]) => {
       setChainId(hexToNumber(args[0]));
-      const active = providerForRdns(storedRdns());
-      void active?.request({ method: "eth_accounts" }).then((a) => {
+      void active()?.request({ method: "eth_accounts" }).then((a) => {
         const acc = (a as string[])[0];
         if (acc) void refreshBalance(acc);
       });
     };
-    provider.on("accountsChanged", onAccounts);
-    provider.on("chainChanged", onChain);
+    type ListenableProvider = Eip1193Provider & {
+      on: NonNullable<Eip1193Provider["on"]>;
+      removeListener: NonNullable<Eip1193Provider["removeListener"]>;
+    };
+    const listenTargets: ListenableProvider[] = [];
+    for (const candidate of [announced.get(storedRdns() ?? "")?.provider, getInjected()]) {
+      if (candidate?.on && candidate.removeListener) {
+        listenTargets.push(candidate as ListenableProvider);
+      }
+    }
+    for (const provider of listenTargets) {
+      provider.on("accountsChanged", onAccounts);
+      provider.on("chainChanged", onChain);
+    }
     return () => {
+      stopped = true;
       if (timer) clearTimeout(timer);
-      provider.removeListener?.("accountsChanged", onAccounts);
-      provider.removeListener?.("chainChanged", onChain);
+      presenceListeners.delete(onAnnounced);
+      for (const provider of listenTargets) {
+        provider.removeListener("accountsChanged", onAccounts);
+        provider.removeListener("chainChanged", onChain);
+      }
     };
   }, [refreshBalance, refreshChain]);
 
@@ -241,8 +276,13 @@ export function useInjectedWallet() {
         })) as string[];
         const account = accounts[0] ?? null;
         if (account) {
-          storeRdns(rdns);
-          setConnectedRdns(rdns);
+          // remember which wallet was used — even for the legacy path,
+          // match the connected provider against the 6963 announcements
+          const legacyMatch = Array.from(announced.values()).find(
+            (d) => d.provider === provider,
+          );
+          storeRdns(legacyMatch?.info.rdns ?? rdns);
+          setConnectedRdns(legacyMatch?.info.rdns ?? rdns);
         }
         setAddress(account);
         setChainId(hexToNumber(await provider.request({ method: "eth_chainId" })));
