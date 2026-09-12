@@ -45,6 +45,7 @@ export const slotsAbi = [
   { type: "function", name: "expire", stateMutability: "nonpayable", inputs: [{ name: "epochId", type: "uint256" }], outputs: [] },
   { type: "function", name: "expireCommitment", stateMutability: "nonpayable", inputs: [{ name: "H", type: "bytes32" }], outputs: [] },
   { type: "function", name: "commitHash", stateMutability: "pure", inputs: [{ name: "size", type: "uint256" }, { name: "epochId", type: "uint256" }, { name: "salt", type: "bytes32" }], outputs: [{ name: "", type: "bytes32" }] },
+  { type: "function", name: "minEscrow", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "slotOf", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "currentEpoch", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "pricePerEth", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },

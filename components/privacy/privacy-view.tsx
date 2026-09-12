@@ -73,6 +73,9 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
   } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [sweepTo, setSweepTo] = useState<string>("");
+  const [sizeInput, setSizeInput] = useState<string>("0.01");
+  const [customSize, setCustomSize] = useState<string>("");
+  const commitSize = customSize !== "" ? Number.parseFloat(customSize) : Number.parseFloat(sizeInput);
 
   const refreshBalance = useCallback(async () => {
     if (!session || s.chain.chainId == null) return;
@@ -94,7 +97,7 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
     queueMicrotask(() => void refreshBalance());
     const t = setInterval(() => void refreshBalance(), 4_000);
     return () => clearInterval(t);
-  }, [refreshBalance]);
+  }, [refreshBalance, session]);
 
   // default the sweep destination to the connected wallet once known
   useEffect(() => {
@@ -171,9 +174,30 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
         abi: slotsAbi,
         functionName: "pricePerEth",
       }) as bigint;
+      const minEscrowWei = await pc.readContract({
+        address: deployment.slots,
+        abi: slotsAbi,
+        functionName: "minEscrow",
+      }) as bigint;
       const sizeWei = parseUnits(String(sizeEth), 18);
-      // same 3× reserve the provider path uses — bounds the escrow leak
-      const escrow = (sizeWei * priceWei * 3n) / parseUnits("1", 18);
+      // same 3× reserve the provider path uses — bounded below by the
+      // contract's minEscrow, or commitMint reverts InsufficientEscrow
+      const escrow =
+        (sizeWei * priceWei * 3n) / parseUnits("1", 18) >= minEscrowWei
+          ? (sizeWei * priceWei * 3n) / parseUnits("1", 18)
+          : minEscrowWei;
+      // the ephemeral wallet pays escrow + gas NOW, and the swap principal
+      // (size ETH) at reveal — refuse early instead of reverting later
+      const needed = escrow + sizeWei;
+      const ephemeralWei = (await pc.getBalance({
+        address: session.account.address as `0x${string}`,
+      })) as bigint;
+      if (ephemeralWei <= needed) {
+        setError(
+          `Ephemeral balance too low — this size needs ${formatUnits(needed, 18)} ETH on the ephemeral wallet (escrow ${formatUnits(escrow, 4)} now + ${sizeEth} principal at reveal, plus gas). Fund more first.`,
+        );
+        return;
+      }
       const salt = `0x${Array.from(
         crypto.getRandomValues(new Uint8Array(32)),
         (b) => b.toString(16).padStart(2, "0"),
@@ -299,16 +323,59 @@ function StealthWalletPanel({ className = "" }: { className?: string }) {
                   fund {v} ETH
                 </button>
               ))}
-              <button
-                type="button"
-                disabled={busy !== null || !hasFunds || s.chain.chainId == null}
-                onClick={() => void commitFromSession(0.01)}
-                aria-busy={busy === "commit"}
-                className="h-11 rounded-md bg-info px-4 font-mono text-xs tabular-nums text-background transition-opacity duration-100 hover:opacity-90 active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
-              >
-                {busy === "commit" ? "Committing…" : "commit 0.01 from ephemeral"}
-              </button>
             </div>
+
+            <fieldset>
+              <legend className="mb-2 font-mono text-[11px] uppercase tracking-widest text-muted">
+                commit size (custom, ETH)
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {["0.01", "0.05", "0.1"].map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={sizeInput === v && customSize === ""}
+                    onClick={() => {
+                      setError(null);
+                      setCustomSize("");
+                      setSizeInput(v);
+                    }}
+                    className={`h-10 rounded-md border px-4 font-mono text-xs tabular-nums transition-colors duration-100 ${
+                      sizeInput === v && customSize === ""
+                        ? "border-info bg-info/10 text-info"
+                        : "border-border text-muted hover:border-border-strong hover:text-foreground"
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step={0.01}
+                  autoComplete="off"
+                  value={customSize}
+                  onChange={(e) => {
+                    setError(null);
+                    setCustomSize(e.target.value);
+                  }}
+                  placeholder="custom"
+                  aria-label="custom commit size in ETH"
+                  className="h-10 w-24 rounded-md border border-border-strong bg-surface-raised px-3 font-mono text-xs tabular-nums text-foreground transition-colors duration-100 placeholder:text-muted/60 focus-visible:border-accent"
+                />
+              </div>
+            </fieldset>
+
+            <button
+              type="button"
+              disabled={busy !== null || !hasFunds || s.chain.chainId == null || !commitSize || commitSize <= 0}
+              onClick={() => void commitFromSession(commitSize)}
+              aria-busy={busy === "commit"}
+              className="inline-flex h-11 w-full items-center justify-center rounded-md bg-info px-4 font-mono text-xs tabular-nums text-background transition-opacity duration-100 hover:opacity-90 active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
+            >
+              {busy === "commit" ? "Committing…" : `commit ${commitSize} ETH from ephemeral`}
+            </button>
 
             {commitment ? (
               <div className="rounded-md border border-info/40 bg-info/5 p-3">

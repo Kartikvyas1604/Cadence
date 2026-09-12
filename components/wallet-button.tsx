@@ -49,6 +49,53 @@ export function WalletButton() {
   }
 
   if (!wallet.address) {
+    // first visit with MULTIPLE wallets detected — let the user pick once;
+    // afterwards the choice is remembered and hard refreshes reconnect silently
+    if (wallet.providers.length > 1 && !wallet.connectedRdns) {
+      return (
+        <div className="flex flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            disabled={wallet.connecting}
+            aria-busy={wallet.connecting}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors duration-100 hover:bg-accent-strong active:translate-y-px disabled:pointer-events-none disabled:opacity-60"
+          >
+            <Wallet className="size-4" aria-hidden />
+            {wallet.connecting ? "Connecting…" : "Connect wallet"}
+          </button>
+          {open ? (
+            <div
+              role="menu"
+              className="absolute right-0 top-12 z-50 w-56 rounded-lg border border-border bg-surface p-1.5 shadow-xl shadow-black/40"
+            >
+              <p className="px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted">
+                which wallet?
+              </p>
+              {wallet.providers.map((p) => (
+                <button
+                  key={p.rdns}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    void wallet.connectTo(p.rdns);
+                  }}
+                  className="flex h-10 w-full items-center gap-2.5 rounded-md px-3 text-sm text-muted transition-colors duration-100 hover:bg-surface-raised hover:text-foreground"
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {wallet.error ? (
+            <p role="alert" className="max-w-52 text-right font-mono text-[10px] leading-4 text-danger">
+              {wallet.error}
+            </p>
+          ) : null}
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-end gap-1">
         <button
