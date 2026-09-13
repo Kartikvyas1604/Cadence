@@ -233,13 +233,19 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
         // epoch minus what has already been sold — keeps /buy + /privacy
         // honest even before a tx triggers the lazy _refreshEpoch
         const epochNow = Math.floor(blockNow / (d.epochLengthBlocks || 12));
-        const [hookBal, minted, committed] = await Promise.all([
+        const [hookBal, minted, committed, epochCap] = await Promise.all([
           pc.getBalance({ address: d.hook }),
           pc.readContract({ address: d.slots, abi: slotsAbi, functionName: "mintedCapacity", args: [BigInt(epochNow)] }) as Promise<bigint>,
           pc.readContract({ address: d.slots, abi: slotsAbi, functionName: "committedCapacity", args: [BigInt(epochNow)] }) as Promise<bigint>,
+          pc.readContract({ address: d.hook, abi: hookAbi, functionName: "epochCapacityEth", args: [BigInt(epochNow)] }) as Promise<bigint>,
         ]);
         if (!alive) return;
-        const activeWei = (hookBal * BigInt(d.lambdaBps)) / 10000n;
+        // PRECISION: if this epoch already refreshed, epochCapacityEth is the
+        // REAL budget — swaps grow the hook balance mid-epoch WITHOUT moving
+        // the boundary, so a λ×balance projection would over-allow and the
+        // mint would revert CapacityExceeded. Only project λ×balance when the
+        // epoch has not refreshed yet (budget still 0 on-chain).
+        const activeWei = epochCap > 0n ? epochCap : (hookBal * BigInt(d.lambdaBps)) / 10000n;
         const used = minted + committed;
         dispatch({ type: "CAPACITY_SYNC", buyCapacityEth: toEth(activeWei > used ? activeWei - used : 0n) });
       } catch {
@@ -451,10 +457,23 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
           (e as { details?: string })?.details ??
           (e instanceof Error ? e.message : "simulation failed");
         lastWriteError.current = detail.slice(0, 160);
-        const dErr = detail.match(/\b(ZeroSwap|CapacityExceeded|InsufficientEscrow|UnsafeWithdraw|BadReveal|ZeroSize|EpochExpired|PassiveUnlock|OversizeVsSlot|OversizeVsActive|NoCadenceSlot)\(\)/);
+        // decode the known named errors even when viem reports a bare signature
+        const SEL: Record<string, string> = {
+          "0x9ff41fe0": "CapacityExceeded — this size exceeds the epoch's remaining capacity budget",
+          "0x90b8ab88": "InsufficientEscrow — the sent value is below the minimum escrow",
+          "0xb6db9bd9": "NoCadenceSlot — no cadence slot held for the current epoch",
+          "0x42af5088": "OversizeVsSlot — trade exceeds your slot capacity",
+          "0xefd222f9": "OversizeVsActive — trade exceeds the epoch's active reserves",
+          "0x5a1b39fc": "PassiveUnlock — a same-block split tried to reach locked reserves",
+          "0x067a3d2e": "UnsafeWithdraw — the withdraw would orphan sold capacity",
+          "0x8ff14e0d": "BadReveal — the reveal does not hash to the commitment",
+          "0xc459d23f": "ZeroSize — size must be nonzero",
+        };
+        const selMatch = detail.match(/0x[0-9a-f]{8}/i);
+        const named = selMatch ? SEL[selMatch[0].toLowerCase()] : undefined;
         throw new Error(
-          dErr
-            ? `${dErr[1]} — the transaction would revert on-chain, so it was not sent to your wallet. ${detail.slice(0, 120)}`
+          named
+            ? `${named} — the transaction was not sent to your wallet.`
             : `transaction would revert on-chain — not sent. ${detail.slice(0, 120)}`,
         );
       }
