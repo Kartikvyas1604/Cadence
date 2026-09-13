@@ -183,7 +183,7 @@ export function PrivateIntentPanel({ className = "" }: { className?: string }) {
             <span className="tabular-nums text-foreground">
               {fmtEth(budget, 3)} <EthIcon />
             </span>{" "}
-            · the escrow reserves 3× the size against it
+            · the escrow reserves 3× the size (min 0.1) against it
           </p>
         ) : null}
         {overBudget ? (

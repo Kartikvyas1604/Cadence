@@ -527,7 +527,16 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
         functionName: "commitHash",
         args: [sizeWei, BigInt(epochId), salt],
       })) as `0x${string}`;
-      const escrow = (sizeWei * BigInt(d.pricePerEth) * 3n) / parseUnits("1", 18);
+      // escrow = 3× size × ask, BUT never below the contract's minEscrow —
+      // a small intent would otherwise revert InsufficientEscrow. The floor
+      // reserves extra capacity; the surplus refunds at reveal.
+      const minEscrow = (await pc.readContract({
+        address: d.slots,
+        abi: slotsAbi,
+        functionName: "minEscrow",
+      })) as bigint;
+      const baseEscrow = (sizeWei * BigInt(d.pricePerEth) * 3n) / parseUnits("1", 18);
+      const escrow = baseEscrow < minEscrow ? minEscrow : baseEscrow;
       const account = s.wallet.address as `0x${string}`;
       const ok = await sendTx(
         () =>
